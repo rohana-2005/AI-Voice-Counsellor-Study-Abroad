@@ -21,12 +21,16 @@ export default function ChatBubble({ role, message, timestamp, isTyping }: ChatB
     >
       {/* Avatar */}
       <div className={cn(
-        'w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0',
+        'w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 overflow-hidden shadow-sm border border-slate-200',
         isAI
-          ? 'bg-gradient-to-br from-blue-500 to-blue-700 text-white'
+          ? 'bg-blue-50'
           : 'bg-gradient-to-br from-slate-600 to-slate-800 text-white'
       )}>
-        {isAI ? '🤖' : 'AS'}
+        {isAI ? (
+          <img src="/ai-avatar.png" alt="AI Counselor" className="w-full h-full object-cover object-[center_20%]" />
+        ) : (
+          'AS'
+        )}
       </div>
 
       <div className={cn('max-w-[80%]', !isAI && 'items-end flex flex-col')}>
