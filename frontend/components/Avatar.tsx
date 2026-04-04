@@ -99,6 +99,8 @@ export default function Avatar() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isMuted, setIsMuted] = useState(false);
+  const [callPhoneNumber, setCallPhoneNumber] = useState('');
+  const [isCalling, setIsCalling] = useState(false);
 
   // Transcript (string that accumulates over the session)
   const transcriptRef = useRef<string>('');
@@ -338,6 +340,34 @@ export default function Avatar() {
     }
   };
 
+  const handlePhoneCall = async () => {
+    const target = callPhoneNumber.trim();
+    if (!target) {
+      setErrorMsg('Enter a phone number in E.164 format, for example +919999999999');
+      return;
+    }
+
+    setIsCalling(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/calls/outbound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to_number: target }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new Error(
+          typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`,
+        );
+      }
+    } catch (err) {
+      setErrorMsg(`Call failed: ${extractErrorMessage(err)}`);
+    } finally {
+      setIsCalling(false);
+    }
+  };
+
   // ─── Status indicator ────────────────────────────────────────────────────────
 
   const StatusBadge = () => {
@@ -475,6 +505,23 @@ export default function Avatar() {
                 <span className="text-slate-200 text-xs font-semibold">{s.value}</span>
               </div>
             ))}
+
+            <div className="pt-2 border-t border-slate-800 mt-2 space-y-2">
+              <input
+                value={callPhoneNumber}
+                onChange={(e) => setCallPhoneNumber(e.target.value)}
+                placeholder="+919999999999"
+                className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs px-3 py-2 rounded-xl focus:outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={handlePhoneCall}
+                disabled={isCalling}
+                className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-slate-300 font-semibold text-xs py-2.5 rounded-xl border border-slate-700 transition"
+              >
+                <PhoneOff className="w-3.5 h-3.5 text-blue-400" />
+                {isCalling ? 'Calling...' : 'Connect via Phone Call'}
+              </button>
+            </div>
           </div>
         </div>
 

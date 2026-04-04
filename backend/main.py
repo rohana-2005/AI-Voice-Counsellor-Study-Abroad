@@ -13,9 +13,9 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 
@@ -324,6 +324,10 @@ class CallWebhookRequest(BaseModel):
     event_type: str
     transcript_chunk: str | None = None
     sentiment: SentimentLabel | None = None
+
+
+class OutboundCallRequest(BaseModel):
+    to_number: str = Field(min_length=8)
 
 
 class RagQueryRequest(BaseModel):
@@ -1082,10 +1086,201 @@ def ingest_call_webhook(payload: CallWebhookRequest) -> dict[str, str]:
     return {"message": "Call webhook route", "call_id": payload.call_id, "event": payload.event_type}
 
 
+def _normalize_phone_for_whatsapp(phone: str) -> str:
+    cleaned = phone.strip()
+    if cleaned.startswith("whatsapp:"):
+        return cleaned
+    return f"whatsapp:{cleaned}"
+
+
+def _summarize_transcript_with_groq(transcript: str) -> str:
+    api_key = os.getenv("GROQ_API_KEY")
+    model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    if not api_key:
+        return transcript[:700]
+
+    body = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Summarize phone call transcripts into 3 concise bullet points.",
+            },
+            {
+                "role": "user",
+                "content": f"Transcript:\n{transcript}",
+            },
+        ],
+        "temperature": 0.2,
+    }
+
+    try:
+        with httpx.Client(timeout=20) as client:
+            response = client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+            response.raise_for_status()
+            data = response.json()
+            choices = data.get("choices", [])
+            if not choices:
+                return transcript[:700]
+            content = choices[0].get("message", {}).get("content", "")
+            return content.strip() or transcript[:700]
+    except Exception:
+        return transcript[:700]
+
+
+@app.post("/api/v1/calls/outbound", tags=["voice"])
+def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
+    _load_local_env()
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+    from_number = os.getenv("TWILIO_PHONE_NUMBER")
+
+    if not account_sid or not auth_token or not from_number:
+        raise HTTPException(
+            status_code=500,
+            detail="Missing Twilio credentials (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER).",
+        )
+
+    twiml_url = os.getenv("TWILIO_OUTBOUND_TWIML_URL", "http://demo.twilio.com/docs/voice.xml")
+
+    try:
+        with httpx.Client(timeout=20) as client:
+            response = client.post(
+                f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json",
+                auth=(account_sid, auth_token),
+                data={
+                    "To": payload.to_number,
+                    "From": from_number,
+                    "Url": twiml_url,
+                },
+            )
+
+        data = response.json() if response.content else {}
+        if response.status_code >= 400:
+            raise HTTPException(
+                status_code=500,
+                detail=data.get("message") or f"Twilio call failed with status {response.status_code}",
+            )
+
+        call_sid = data.get("sid")
+        if not call_sid:
+            raise HTTPException(status_code=500, detail="Twilio call created but SID missing in response.")
+        return {"message": "Outbound call initiated", "call_sid": str(call_sid)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to initiate outbound call: {exc}") from exc
+
+@app.post("/api/v1/webhook/incoming-call")
+def handle_incoming_call():
+    twiml = (
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<Response>"
+        "<Say>Thank you for calling. Please leave your message after the beep.</Say>"
+        "<Record transcribe=\"true\" transcribeCallback=\"/api/v1/webhook/transcription\" maxLength=\"300\" playBeep=\"true\"/>"
+        "</Response>"
+    )
+    return Response(content=twiml, media_type="text/xml")
+
+@app.post("/api/v1/webhook/transcription")
+def handle_call_transcription(
+    CallSid: str = Form(...),
+    TranscriptionText: str = Form(default=""),
+    RecordingUrl: str = Form(default=""),
+    Caller: str = Form(default=""),
+    Called: str = Form(default=""),
+):
+    if not TranscriptionText.strip():
+        return {"status": "skipped", "reason": "empty_transcription", "call_sid": CallSid}
+
+    summary = _summarize_transcript_with_groq(TranscriptionText)
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+    from_number = os.getenv("TWILIO_WHATSAPP_FROM")
+    to_number = Caller or Called
+
+    if account_sid and auth_token and from_number and to_number:
+        try:
+            with httpx.Client(timeout=20) as client:
+                client.post(
+                    f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
+                    auth=(account_sid, auth_token),
+                    data={
+                        "From": _normalize_phone_for_whatsapp(from_number),
+                        "To": _normalize_phone_for_whatsapp(to_number),
+                        "Body": f"Call summary:\n\n{summary}\n\nRecording: {RecordingUrl}",
+                    },
+                )
+        except Exception:
+            # Keep webhook healthy even if messaging fails.
+            pass
+
+    return {
+        "status": "ok",
+        "call_sid": CallSid,
+        "summary": summary,
+    }
+
+@app.post("/api/v1/webhook/whatsapp-incoming")
+def handle_whatsapp_incoming(
+    Body: str = Form(...),
+    From: str = Form(...)
+):
+    print(f"WhatsApp message from {From}: {Body}")
+    twiml = (
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<Response>"
+        "<Message>Got your message! We will summarize and reply shortly.</Message>"
+        "</Response>"
+    )
+    return Response(content=twiml, media_type="text/xml")
+
+
 @app.post("/api/v1/messages/whatsapp/send-summary", tags=["messaging"])
 def send_whatsapp_summary(lead_id: str = Query(...)) -> dict[str, str]:
-    # TODO: send call summary and recommendations through Twilio WhatsApp.
-    return {"message": "WhatsApp summary route", "lead_id": lead_id}
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+    from_number = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+
+    if not account_sid or not auth_token:
+        raise HTTPException(
+            status_code=500, detail="Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN."
+        )
+
+    # Simplified stub for retrieving a lead and sending a message
+    to_number = "whatsapp:+1234567890"  # Replace with actual lead phone number
+    summary = "Here is your summary..."
+
+    try:
+        with httpx.Client(timeout=20) as client:
+            response = client.post(
+                f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
+                auth=(account_sid, auth_token),
+                data={
+                    "From": from_number,
+                    "To": to_number,
+                    "Body": f"📋 *Call Summary*\n\n{summary}",
+                },
+            )
+
+        data = response.json() if response.content else {}
+        if response.status_code >= 400:
+            raise HTTPException(status_code=500, detail=data.get("message") or "Failed to send WhatsApp summary")
+
+        return {
+            "message": "WhatsApp summary sent",
+            "lead_id": lead_id,
+            "message_sid": str(data.get("sid", "")),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/v1/book", tags=["appointments"])
