@@ -31,9 +31,9 @@ def _load_local_env() -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        existing = os.environ.get(key)
-        if existing is None or not existing.strip():
-            os.environ[key] = value
+        # Always override os.environ when reading from .env to ensure hot-reloading 
+        # picks up the brand new API key or persona ID
+        os.environ[key] = value
 
 
 _load_local_env()
