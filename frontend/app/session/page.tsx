@@ -14,8 +14,12 @@ export default function SessionPage() {
   const [isListening, setIsListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [showRecs, setShowRecs] = useState(true);
+  const [hasStartedSession, setHasStartedSession] = useState(false);
+  const [isStartingSession, setIsStartingSession] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clientRef = useRef<any>(null);
 
   const aiResponses = [
     "That's a great question! Let me analyze your profile against the latest university data...",
@@ -30,42 +34,46 @@ export default function SessionPage() {
   }, [messages, isTyping]);
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let client: any = null;
-
-    const startSession = async () => {
-      try {
-        const res = await fetch("http://localhost:8000/anam/session", {
-          method: "POST",
-        });
-        const data = await res.json();
-        
-        // Fast API returns session_token in snake_case, SDK might want either
-        const token = data.session_token || data.sessionToken;
-        
-        if (!token) {
-            console.error("Missing session token in backend response:", data);
-            return;
-        }
-
-        client = createClient(token);
-
-        // Using string ID to prevent the client context binding error
-        if (videoRef.current) {
-            await client.streamToVideoElement("anam-video-element");
-        }
-      } catch (error) {
-        console.error("Failed to start Anam session:", error);
-      }
-    };
-
-    startSession();
-
     return () => {
-      if (client?.stopStreaming) {
-        client.stopStreaming();
+      if (clientRef.current?.stopStreaming) {
+        clientRef.current.stopStreaming();
       }
     };
+  }, []);
+
+  const startSession = async () => {
+    if (isStartingSession || hasStartedSession) return;
+    setIsStartingSession(true);
+
+    try {
+      const res = await fetch('http://localhost:8000/anam/session', {
+        method: 'POST',
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.detail?.message || data?.detail || 'Failed to create session');
+      }
+
+      const token = data.session_token || data.sessionToken;
+      if (!token) {
+        throw new Error('Missing session token in backend response');
+      }
+
+      clientRef.current = createClient(token);
+      await clientRef.current.streamToVideoElement('anam-video-element');
+      setHasStartedSession(true);
+    } catch (error) {
+      console.error('Failed to start Anam session:', error);
+    } finally {
+      setIsStartingSession(false);
+    }
+  };
+
+  useEffect(() => {
+    startSession();
+    // Start once on initial page load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSend = async () => {
@@ -95,8 +103,8 @@ export default function SessionPage() {
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
       {/* Header */}
-      <div className="bg-slate-900 border-b border-slate-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-3 sm:py-4">
+        <div className="max-w-[1500px] mx-auto flex items-center justify-between gap-3">
           <Link href="/dashboard" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center">
               <GraduationCap className="w-4 h-4 text-white" />
@@ -119,10 +127,10 @@ export default function SessionPage() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-6 flex flex-col lg:flex-row gap-6">
+      <div className="flex-1 max-w-[1500px] mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 flex flex-col xl:flex-row gap-4 sm:gap-6 min-h-0">
 
         {/* Left: Avatar column */}
-        <div className="lg:w-80 flex flex-col gap-4">
+        <div className="w-full xl:w-[340px] xl:flex-shrink-0 flex flex-col gap-4">
           <div className="relative w-full aspect-[3/4] bg-slate-800 rounded-3xl overflow-hidden border-4 border-slate-700/50 shadow-xl">
             <video
               id="anam-video-element"
@@ -150,14 +158,14 @@ export default function SessionPage() {
           </div>
 
           {/* Phone option */}
-          <button className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 py-3 rounded-2xl transition-colors">
+          <button className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 py-3.5 rounded-2xl transition-colors">
             <Phone className="w-4 h-4" />
             Switch to Phone Call
           </button>
         </div>
 
         {/* Center: Chat transcript */}
-        <div className="flex-1 flex flex-col bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden min-h-0">
+        <div className="flex-1 min-w-0 flex flex-col bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden min-h-0">
           {/* Chat header */}
           <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-700">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
@@ -170,7 +178,7 @@ export default function SessionPage() {
           </div>
 
           {/* Messages area */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2" style={{ maxHeight: 'calc(100vh - 320px)' }}>
+          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-2" style={{ maxHeight: 'calc(100vh - 280px)' }}>
             {/* Dark mode chat bubbles overrides */}
             <div className="space-y-3">
               {messages.map((msg, i) => (
@@ -216,7 +224,7 @@ export default function SessionPage() {
           </div>
 
           {/* Input area */}
-          <div className="px-5 py-4 border-t border-slate-700 bg-slate-800/80">
+          <div className="px-5 py-4 border-t border-slate-700 bg-slate-800/80 mt-auto">
             <div className="flex items-center gap-3">
               {/* Big mic button */}
               <button
@@ -259,12 +267,12 @@ export default function SessionPage() {
 
         {/* Right: Dynamic recommendations */}
         {showRecs && (
-          <div className="lg:w-72 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
+          <div className="w-full xl:w-[320px] xl:flex-shrink-0 flex flex-col gap-3 min-h-0">
+            <div className="flex items-center justify-between px-1">
               <p className="text-slate-300 text-sm font-semibold">🎓 Recommended Universities</p>
               <button onClick={() => setShowRecs(false)} className="text-slate-600 text-xs hover:text-slate-400">Hide</button>
             </div>
-            <div className="space-y-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+            <div className="space-y-3 overflow-y-auto pr-1" style={{ maxHeight: 'calc(100vh - 180px)' }}>
               {universityRecommendations.slice(0, 3).map((uni, i) => (
                 <div key={uni.id} className="bg-slate-800 rounded-xl border border-slate-700 p-4 hover:border-blue-500/50 transition-colors cursor-pointer">
                   <div className="flex items-center gap-2 mb-2">
