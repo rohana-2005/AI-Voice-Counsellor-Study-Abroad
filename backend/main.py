@@ -14,6 +14,7 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 
@@ -151,6 +152,14 @@ class RagQueryResponse(BaseModel):
     contexts: list[RagContextChunk]
 
 
+class CalendarBookRequest(BaseModel):
+    access_token: str
+    startTime: datetime
+    endTime: datetime
+    subject: str | None = None
+    description: str | None = None
+
+
 def _extract_terms(text: str) -> list[str]:
     tokens = re.findall(r"[a-zA-Z0-9]+", text.lower())
     stopwords = {
@@ -175,6 +184,47 @@ def _extract_terms(text: str) -> list[str]:
         "we",
     }
     return [token for token in tokens if token not in stopwords and len(token) > 1]
+
+
+def _encode_auth_state(mode: str, origin: str) -> str:
+        payload = {"mode": mode, "origin": origin}
+        return _b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+
+
+def _parse_auth_state(state: str | None) -> dict[str, str]:
+        if not state:
+                return {}
+
+        try:
+                padded = state + "=" * (-len(state) % 4)
+                decoded = base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8")
+                parsed = json.loads(decoded)
+                if isinstance(parsed, dict):
+                        return {str(k): str(v) for k, v in parsed.items()}
+                return {}
+        except Exception:
+                return {}
+
+
+def _popup_response(origin: str, payload: dict[str, str]) -> HTMLResponse:
+        safe_origin = json.dumps(origin)
+        safe_payload = json.dumps(payload)
+        html = f"""<!doctype html>
+<html>
+    <body>
+        <script>
+            (function () {{
+                var origin = {safe_origin};
+                var payload = {safe_payload};
+                if (window.opener) {{
+                    window.opener.postMessage(payload, origin);
+                }}
+                window.close();
+            }})();
+        </script>
+    </body>
+</html>"""
+        return HTMLResponse(content=html)
 
 
 def _rank_knowledge_chunks(query: str, rows: list[dict]) -> list[RagContextChunk]:
@@ -361,6 +411,34 @@ def google_login(
     return {"auth_url": auth_url, "state": state}
 
 
+@app.get("/api/v1/auth/google", tags=["auth"])
+def google_auth_start(
+    request: Request,
+    mode: Literal["popup", "redirect"] = Query(default="redirect"),
+    origin: str | None = Query(default=None),
+) -> dict[str, str]:
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+
+    if not client_id or not redirect_uri:
+        raise HTTPException(status_code=500, detail="Missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI configuration.")
+
+    app_origin = origin or request.headers.get("origin") or str(request.base_url).rstrip("/")
+    encoded_state = _encode_auth_state(mode=mode, origin=app_origin)
+    query_params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "https://www.googleapis.com/auth/calendar",
+        "state": encoded_state,
+        "access_type": "offline",
+        "prompt": "consent",
+        "include_granted_scopes": "true",
+    }
+    url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(query_params)}"
+    return {"url": url}
+
+
 @app.get("/api/v1/auth/google/callback", tags=["auth"])
 def google_callback(
     request: Request,
@@ -370,7 +448,16 @@ def google_callback(
     redirect_uri: str | None = Query(default=None),
     error: str | None = Query(default=None),
 ) -> dict[str, str | int | None]:
+    parsed_state = _parse_auth_state(state)
+    mode = parsed_state.get("mode", "")
+    app_origin = parsed_state.get("origin")
+    is_popup_flow = mode in {"popup", "redirect"} and bool(app_origin)
+
     if error:
+        if is_popup_flow and app_origin:
+            if mode == "popup":
+                return _popup_response(app_origin, {"type": "google-oauth-error", "error": error})
+            return RedirectResponse(url=f"{app_origin}/dashboard?error={error}", status_code=307)
         raise HTTPException(status_code=400, detail=f"Google OAuth error: {error}")
 
     client_id = os.getenv("GOOGLE_CLIENT_ID")
@@ -384,10 +471,11 @@ def google_callback(
             detail="Missing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, or GOOGLE_REDIRECT_URI configuration.",
         )
 
-    state_cookie = request.cookies.get("oauth_state")
-    if not state_cookie or not hmac.compare_digest(state_cookie, state):
-        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
-    response.delete_cookie("oauth_state")
+    if not is_popup_flow:
+        state_cookie = request.cookies.get("oauth_state")
+        if not state_cookie or not hmac.compare_digest(state_cookie, state):
+            raise HTTPException(status_code=400, detail="Invalid or missing OAuth state.")
+        response.delete_cookie("oauth_state")
 
     token_payload = {
         "code": code,
@@ -416,7 +504,19 @@ def google_callback(
 
     access_token = token_data.get("access_token")
     if not access_token:
+        if is_popup_flow and app_origin:
+            if mode == "popup":
+                return _popup_response(app_origin, {"type": "google-oauth-error", "error": "missing_access_token"})
+            return RedirectResponse(url=f"{app_origin}/dashboard?error=missing_access_token", status_code=307)
         raise HTTPException(status_code=400, detail="Google did not return an access token.")
+
+    if is_popup_flow and app_origin:
+        if mode == "popup":
+            return _popup_response(app_origin, {"type": "google-oauth-success", "accessToken": str(access_token)})
+        return RedirectResponse(
+            url=f"{app_origin}/dashboard?access_token={str(access_token)}",
+            status_code=307,
+        )
 
     userinfo = _fetch_google_userinfo(access_token)
     user_sub = userinfo.get("sub")
@@ -455,6 +555,73 @@ def google_callback(
         "token_type": token_data.get("token_type"),
         "expires_in": token_data.get("expires_in"),
     }
+
+
+@app.get("/api/v1/auth/callback", tags=["auth"])
+def google_auth_callback_compat(
+    request: Request,
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+):
+    parsed_state = _parse_auth_state(state)
+    mode = parsed_state.get("mode", "redirect")
+    app_origin = parsed_state.get("origin") or request.headers.get("origin") or "http://localhost:3000"
+
+    if error:
+        if mode == "popup":
+            return _popup_response(app_origin, {"type": "google-oauth-error", "error": error})
+        return RedirectResponse(url=f"{app_origin}/dashboard?error={error}", status_code=307)
+
+    if not code:
+        if mode == "popup":
+            return _popup_response(app_origin, {"type": "google-oauth-error", "error": "missing_code"})
+        return RedirectResponse(url=f"{app_origin}/dashboard?error=missing_code", status_code=307)
+
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    if not client_id or not client_secret or not redirect_uri:
+        raise HTTPException(
+            status_code=500,
+            detail="Missing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, or GOOGLE_REDIRECT_URI configuration.",
+        )
+
+    token_payload = {
+        "code": code,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    }
+    req = urlrequest.Request(
+        "https://oauth2.googleapis.com/token",
+        data=urlencode(token_payload).encode("utf-8"),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+
+    try:
+        with urlrequest.urlopen(req, timeout=20) as token_res:
+            token_data = json.loads(token_res.read().decode("utf-8"))
+    except Exception:
+        if mode == "popup":
+            return _popup_response(app_origin, {"type": "google-oauth-error", "error": "token_exchange_failed"})
+        return RedirectResponse(url=f"{app_origin}/dashboard?error=token_exchange_failed", status_code=307)
+
+    access_token = str(token_data.get("access_token") or "")
+    if not access_token:
+        if mode == "popup":
+            return _popup_response(app_origin, {"type": "google-oauth-error", "error": "missing_access_token"})
+        return RedirectResponse(url=f"{app_origin}/dashboard?error=missing_access_token", status_code=307)
+
+    if mode == "popup":
+        return _popup_response(app_origin, {"type": "google-oauth-success", "accessToken": access_token})
+
+    return RedirectResponse(
+        url=f"{app_origin}/dashboard?access_token={access_token}",
+        status_code=307,
+    )
 
 
 @app.post("/api/v1/leads", tags=["leads"])
@@ -524,6 +691,44 @@ def ingest_call_webhook(payload: CallWebhookRequest) -> dict[str, str]:
 def send_whatsapp_summary(lead_id: str = Query(...)) -> dict[str, str]:
     # TODO: send call summary and recommendations through Twilio WhatsApp.
     return {"message": "WhatsApp summary route", "lead_id": lead_id}
+
+
+@app.post("/api/v1/book", tags=["appointments"])
+def book_calendar_event(payload: CalendarBookRequest):
+    if payload.endTime <= payload.startTime:
+        raise HTTPException(status_code=400, detail="endTime must be after startTime.")
+
+    event_payload = {
+        "summary": (payload.subject or "AI Counselling Session").strip() or "AI Counselling Session",
+        "description": (payload.description or "Scheduled via StudyAbroad.AI dashboard").strip(),
+        "start": {"dateTime": payload.startTime.isoformat()},
+        "end": {"dateTime": payload.endTime.isoformat()},
+    }
+
+    req = urlrequest.Request(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        data=json.dumps(event_payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {payload.access_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlrequest.urlopen(req, timeout=20) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            return {
+                "success": True,
+                "eventId": data.get("id"),
+                "htmlLink": data.get("htmlLink"),
+            }
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=400, detail=f"Failed to create calendar event: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Google Calendar API unreachable: {err.reason}") from err
 
 
 @app.post("/api/v1/rag/query", response_model=RagQueryResponse, tags=["rag"])

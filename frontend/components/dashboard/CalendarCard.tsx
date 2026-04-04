@@ -10,6 +10,18 @@ const seedEvents = [
 ];
 
 export default function CalendarCard() {
+  const backendBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000',
+    []
+  );
+  const backendOrigin = useMemo(() => {
+    try {
+      return new URL(backendBaseUrl).origin;
+    } catch {
+      return 'http://localhost:8000';
+    }
+  }, [backendBaseUrl]);
+
   const [accessToken, setAccessToken] = useState('');
   const [authStatus, setAuthStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [authError, setAuthError] = useState('');
@@ -30,7 +42,7 @@ export default function CalendarCard() {
 
   useEffect(() => {
     const receiveMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) {
+      if (event.origin !== window.location.origin && event.origin !== backendOrigin) {
         return;
       }
 
@@ -49,7 +61,7 @@ export default function CalendarCard() {
 
     window.addEventListener('message', receiveMessage);
     return () => window.removeEventListener('message', receiveMessage);
-  }, []);
+  }, [backendOrigin]);
 
   const canSchedule = useMemo(
     () => Boolean(accessToken && subject.trim() && date && time && duration),
@@ -61,7 +73,8 @@ export default function CalendarCard() {
     setAuthError('');
 
     try {
-      const res = await fetch('/api/auth/google?mode=popup');
+      const url = `${backendBaseUrl}/api/v1/auth/google?mode=popup&origin=${encodeURIComponent(window.location.origin)}`;
+      const res = await fetch(url, { credentials: 'include' });
       const data = await res.json();
 
       popupRef.current = window.open(
@@ -95,9 +108,10 @@ export default function CalendarCard() {
     setBookingLink('');
 
     try {
-      const res = await fetch('/api/book', {
+      const res = await fetch(`${backendBaseUrl}/api/v1/book`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           access_token: accessToken,
           subject,
