@@ -1128,9 +1128,19 @@ def book_calendar_event(payload: CalendarBookRequest):
 
 @app.get("/api/v1/calendar/events", tags=["appointments"])
 def get_calendar_events(
-    access_token: str = Query(...),
+    request: Request,
+    access_token: str | None = Query(default=None),
     max_results: int = Query(default=10, ge=1, le=50),
 ):
+    bearer_token = ""
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        bearer_token = auth_header[7:].strip()
+
+    token = (bearer_token or access_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing access token.")
+
     now_utc = datetime.utcnow().isoformat() + "Z"
     params = urlencode(
         {
@@ -1143,7 +1153,7 @@ def get_calendar_events(
     req = urlrequest.Request(
         f"https://www.googleapis.com/calendar/v3/calendars/primary/events?{params}",
         headers={
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": f"Bearer {token}",
             "Accept": "application/json",
         },
         method="GET",
@@ -1169,6 +1179,19 @@ def get_calendar_events(
             return {"success": True, "events": events}
     except HTTPError as err:
         detail = err.read().decode("utf-8") if err.fp else str(err)
+        lower_detail = detail.lower()
+        if err.code in {400, 401, 403} and (
+            "invalid credentials" in lower_detail
+            or "insufficient" in lower_detail
+            or "permission" in lower_detail
+            or "scope" in lower_detail
+            or "login required" in lower_detail
+        ):
+            return {
+                "success": True,
+                "events": [],
+                "warning": "Google Calendar access expired or missing permission. Reconnect Google to sync events.",
+            }
         raise HTTPException(status_code=400, detail=f"Failed to fetch calendar events: {detail}") from err
     except URLError as err:
         raise HTTPException(status_code=502, detail=f"Google Calendar API unreachable: {err.reason}") from err
