@@ -13,7 +13,7 @@ export default function AuthRouteWrapper({ children }: { children: React.ReactNo
   const isOnboarding = pathname === '/onboarding';
 
   useEffect(() => {
-    if (isHome || loading) {
+    if (isHome || isOnboarding || loading) {
       return;
     }
 
@@ -32,7 +32,7 @@ export default function AuthRouteWrapper({ children }: { children: React.ReactNo
     }
   }, [isHome, isOnboarding, loading, isAuthenticated, needsOnboarding, router]);
 
-  if (isHome) {
+  if (isHome || isOnboarding) {
     return <>{children}</>;
   }
 
