@@ -140,6 +140,65 @@ export default function CalendarCard() {
     }
   };
 
+  const bookGeneratedEvents = async () => {
+    const rawEvents = localStorage.getItem('onboardingEvents');
+    if (!rawEvents || !accessToken) return;
+
+    try {
+      const generatedEvents = JSON.parse(rawEvents);
+      if (!Array.isArray(generatedEvents) || generatedEvents.length === 0) return;
+
+      setIsBooking(true);
+      setBookingMessage('Syncing auto-generated schedule to your calendar...');
+
+      let syncedCount = 0;
+
+      for (const ev of generatedEvents) {
+        const startLocal = new Date(`${ev.date}T${ev.time}:00`);
+        const endLocal = new Date(startLocal.getTime() + ev.duration * 60 * 1000);
+
+        const res = await fetch('/api/book', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_token: accessToken,
+            subject: ev.label,
+            description: 'AI Counselor Auto-Generated Milestone',
+            startTime: startLocal.toISOString(),
+            endTime: endLocal.toISOString(),
+          }),
+        });
+
+        if (res.ok) {
+          syncedCount++;
+          const displayDate = startLocal.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const displayTime = startLocal.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+          setUpcomingEvents((prev) => [
+            {
+              label: ev.label,
+              date: displayDate,
+              time: displayTime,
+              color: ev.color || '#2563eb',
+            },
+            ...prev,
+          ]);
+        }
+      }
+
+      setBookedCount((prev) => prev + syncedCount);
+      setBookingMessage(`Successfully synced ${syncedCount} AI milestones to your calendar!`);
+      localStorage.removeItem('onboardingEvents'); // clear them after syncing
+      setCalendarPreviewNonce((prev) => prev + 1);
+
+    } catch (e) {
+      console.error(e);
+      setBookingMessage('Failed to sync auto-generated events.');
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
   const calendarEmbedUrl =
     'https://calendar.google.com/calendar/embed?src=ruchigadgil%40gmail.com&ctz=Asia%2FKolkata';
 
@@ -218,6 +277,32 @@ export default function CalendarCard() {
         {authError ? <p style={{ fontSize: '11px', color: '#b91c1c', marginBottom: '8px' }}>{authError}</p> : null}
 
         <div style={{ display: 'grid', gap: '8px' }}>
+          
+          {typeof window !== 'undefined' && localStorage.getItem('onboardingEvents') && (
+            <button
+               onClick={bookGeneratedEvents}
+               disabled={!accessToken || isBooking}
+               style={{
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 gap: '6px',
+                 background: !accessToken || isBooking ? '#fcd34d' : '#3b82f6',
+                 color: '#ffffff',
+                 fontSize: '13px',
+                 fontWeight: 600,
+                 padding: '10px 14px',
+                 borderRadius: '10px',
+                 border: 'none',
+                 cursor: !accessToken || isBooking ? 'not-allowed' : 'pointer',
+                 marginBottom: '10px'
+               }}
+            >
+               <CheckCircle2 size={16} />
+               {isBooking ? 'Syncing...' : 'Sync AI Milestones to Calendar'}
+            </button>
+          )}
+
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}

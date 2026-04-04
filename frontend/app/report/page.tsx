@@ -1,9 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Download, CheckCircle2, Circle, ArrowRight, GraduationCap, ChevronLeft } from 'lucide-react';
+import { Download, CheckCircle2, Circle, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { callSession, student, academicProfile, universityRecommendations } from '@/lib/mockData';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import { callSession, student, universityRecommendations } from '@/lib/mockData';
 import ProgressCircle from '@/components/shared/ProgressCircle';
 
 export default function ReportPage() {
@@ -36,33 +37,22 @@ export default function ReportPage() {
   const cls = clsConfig[callSession.classification];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Navbar */}
-      <div className="bg-white border-b border-slate-100 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-            <span className="text-sm font-medium">Back to Dashboard</span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-blue-600 rounded-xl flex items-center justify-center">
-              <GraduationCap className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-slate-900 text-sm">StudyAbroad<span className="text-blue-600">.AI</span></span>
-          </div>
+    <DashboardLayout
+      title="Session Report"
+      subtitle={`Generated from AI counseling session · ${callSession.date}`}
+    >
+      <div className="max-w-5xl mx-auto">
+        <div className="flex justify-end mb-4">
           <button className="flex items-center gap-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl transition-colors shadow-sm shadow-blue-200">
             <Download className="w-4 h-4" />
             Download Report
           </button>
         </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-6 py-8">
         {/* Report header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-3xl p-8 text-white mb-8 relative overflow-hidden"
+          className="bg-linear-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-3xl p-8 text-white mb-8 relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
@@ -155,7 +145,7 @@ export default function ReportPage() {
               {/* Progress bar */}
               <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-5">
                 <motion.div
-                  className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full"
+                  className="h-full bg-linear-to-r from-green-400 to-green-600 rounded-full"
                   animate={{ width: `${(checkedItems.size / callSession.recommended_actions.length) * 100}%` }}
                   transition={{ duration: 0.4 }}
                 />
@@ -174,16 +164,16 @@ export default function ReportPage() {
                       }`}
                     >
                       {isDone ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
                       ) : (
-                        <Circle className="w-5 h-5 text-slate-300 flex-shrink-0 mt-0.5" />
+                        <Circle className="w-5 h-5 text-slate-300 shrink-0 mt-0.5" />
                       )}
                       <div className="flex-1">
                         <p className={`text-sm font-medium ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                           {action.action}
                         </p>
                       </div>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
                         action.priority === 'High' ? 'bg-red-50 text-red-600' :
                         action.priority === 'Medium' ? 'bg-amber-50 text-amber-600' :
                         'bg-slate-50 text-slate-500'
@@ -249,7 +239,7 @@ export default function ReportPage() {
                         transition={{ delay: 0.2 + i * 0.08 }}
                         className="flex items-start gap-4 pl-2"
                       >
-                        <div className={`relative z-10 w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs mt-0.5 ${
+                        <div className={`relative z-10 w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs mt-0.5 ${
                           isDone ? 'bg-green-500' :
                           isCurrent ? 'bg-blue-500 ring-4 ring-blue-100' :
                           'bg-slate-200'
@@ -261,7 +251,7 @@ export default function ReportPage() {
 
                         <div>
                           <p className={`text-sm font-semibold ${isDone ? 'text-slate-500' : isCurrent ? 'text-blue-600' : 'text-slate-400'}`}>
-                            {step.emoji} {step.label}
+                            {step.icon} {step.label}
                           </p>
                           <p className="text-xs text-slate-400">{step.date}</p>
                           {isCurrent && (
@@ -316,7 +306,7 @@ export default function ReportPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white"
+              className="bg-linear-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white"
             >
               <h3 className="font-bold mb-2 text-base">Ready for Next Steps?</h3>
               <p className="text-blue-200 text-xs mb-4 leading-relaxed">
@@ -332,6 +322,6 @@ export default function ReportPage() {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

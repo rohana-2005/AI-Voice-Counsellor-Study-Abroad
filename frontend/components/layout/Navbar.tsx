@@ -2,8 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { GraduationCap, Menu, X } from 'lucide-react';
-import { useState } from 'react';
+import { GraduationCap } from 'lucide-react';
 
 const navLinks = [
   { label: 'Home',         href: '/' },
@@ -14,10 +13,14 @@ const navLinks = [
 
 export default function Navbar() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
 
   // Hide on app pages
-  if (pathname?.startsWith('/dashboard') || pathname?.startsWith('/session') || pathname?.startsWith('/report')) {
+  if (
+    pathname?.startsWith('/dashboard') ||
+    pathname?.startsWith('/session') ||
+    pathname?.startsWith('/report') ||
+    pathname?.startsWith('/onboarding')
+  ) {
     return null;
   }
 
