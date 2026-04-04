@@ -32,9 +32,9 @@ def _load_local_env() -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        existing = os.environ.get(key)
-        if existing is None or not existing.strip():
-            os.environ[key] = value
+        # Always override os.environ when reading from .env to ensure hot-reloading 
+        # picks up the brand new API key or persona ID
+        os.environ[key] = value
 
 
 _load_local_env()
@@ -1346,6 +1346,10 @@ class SessionTokenResponse(BaseModel):
     session_token: str
 
 
+class SessionTokenRequest(BaseModel):
+    languageCode: str | None = None
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -1367,12 +1371,27 @@ async def create_anam_session(request: Request) -> SessionTokenResponse:
     persona_name = os.getenv("ANAM_PERSONA_NAME")
     system_prompt = os.getenv("ANAM_SYSTEM_PROMPT")
 
+    body: dict[str, Any] = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    requested_language = str(body.get("languageCode") or body.get("language_code") or "").strip().lower()
+    configured_language = os.getenv("ANAM_LANGUAGE_CODE", "").strip().lower()
+    language_code = requested_language or configured_language
+
+    if language_code and not re.fullmatch(r"[a-z]{2}", language_code):
+        raise HTTPException(status_code=400, detail="languageCode must be a 2-letter ISO-639-1 code")
+
     if not anam_api_key:
         raise HTTPException(status_code=500, detail="ANAM_API_KEY is not set")
 
     # Use published persona when available, otherwise send the provided persona fields.
     if persona_id:
         persona_config: dict[str, Any] = {"personaId": persona_id}
+        if language_code:
+            persona_config["languageCode"] = language_code
     else:
         if not avatar_id or not voice_id:
             raise HTTPException(
@@ -1395,6 +1414,8 @@ async def create_anam_session(request: Request) -> SessionTokenResponse:
             persona_config["name"] = persona_name
         if system_prompt:
             persona_config["systemPrompt"] = system_prompt
+        if language_code:
+            persona_config["languageCode"] = language_code
 
     payload = {"personaConfig": persona_config}
 
@@ -1434,5 +1455,3 @@ async def create_anam_session(request: Request) -> SessionTokenResponse:
         )
 
     return SessionTokenResponse(session_token=session_token)
-
-    return response.json()
