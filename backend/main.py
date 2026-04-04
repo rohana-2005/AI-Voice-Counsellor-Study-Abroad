@@ -20,21 +20,24 @@ from pydantic import BaseModel, Field
 
 
 def _load_local_env() -> None:
-    env_path = Path(__file__).resolve().parent / ".env"
-    if not env_path.exists():
-        return
-
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    env_paths = [
+        Path(__file__).resolve().parent / ".env",
+        Path(__file__).resolve().parent / ".env.local"
+    ]
+    
+    for env_path in env_paths:
+        if not env_path.exists():
             continue
 
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        # Always override os.environ when reading from .env to ensure hot-reloading 
-        # picks up the brand new API key or persona ID
-        os.environ[key] = value
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            os.environ[key] = value
 
 
 _load_local_env()
@@ -147,6 +150,45 @@ def _sync_student_on_login(userinfo: dict[str, str]) -> dict:
     except HTTPError as err:
         detail = err.read().decode("utf-8") if err.fp else str(err)
         raise HTTPException(status_code=502, detail=f"Supabase students lookup failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    full_name = str(userinfo.get("name") or "").strip() or email.split("@", 1)[0]
+    auth_user_id = _get_or_create_auth_user_id(email=email, full_name=full_name)
+    if not auth_user_id:
+        raise HTTPException(status_code=502, detail="Failed to provision Supabase auth user for student.")
+
+    insert_payload = [
+        {
+            "id": auth_user_id,
+            "full_name": full_name,
+            "email": email,
+            "phone_number": f"pending-{str(uuid.uuid4())[:8]}",
+            "location": None,
+        }
+    ]
+    insert_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/students",
+        data=json.dumps(insert_payload).encode("utf-8"),
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Prefer": "return=representation",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlrequest.urlopen(insert_req, timeout=20) as response:
+            created = json.loads(response.read().decode("utf-8"))
+            if isinstance(created, list) and created:
+                return created[0]
+            return {}
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase student create failed: {detail}") from err
     except URLError as err:
         raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
 
