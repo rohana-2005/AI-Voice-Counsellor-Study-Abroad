@@ -5,6 +5,7 @@ import hmac
 import base64
 import hashlib
 import re
+import uuid
 from pathlib import Path
 from datetime import datetime
 from urllib import request as urlrequest
@@ -148,6 +149,51 @@ def _sync_student_on_login(userinfo: dict[str, str]) -> dict:
         raise HTTPException(status_code=502, detail=f"Supabase students lookup failed: {detail}") from err
     except URLError as err:
         raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+
+def _require_admin(access_token: str) -> dict:
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Missing access token.")
+
+    profile = _fetch_google_userinfo(access_token)
+    email = str(profile.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=401, detail="Access token did not include email.")
+
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+
+    query = urlencode(
+        {
+            "select": "id,full_name,email",
+            "email": f"eq.{email}",
+            "limit": "1",
+        }
+    )
+    req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/admins?{query}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(req, timeout=20) as response:
+            rows = json.loads(response.read().decode("utf-8"))
+            if isinstance(rows, list) and rows:
+                return rows[0]
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase admins lookup failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    raise HTTPException(status_code=403, detail="Admin access required.")
 
     full_name = str(userinfo.get("name") or email.split("@")[0]).strip()
     location = str(userinfo.get("locale") or "").strip() or None
@@ -297,9 +343,11 @@ def _extract_terms(text: str) -> list[str]:
     return [token for token in tokens if token not in stopwords and len(token) > 1]
 
 
-def _encode_auth_state(mode: str, origin: str) -> str:
-        payload = {"mode": mode, "origin": origin}
-        return _b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+def _encode_auth_state(mode: str, origin: str, role: str | None = None) -> str:
+    payload = {"mode": mode, "origin": origin}
+    if role:
+        payload["role"] = role
+    return _b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
 
 
 def _parse_auth_state(state: str | None) -> dict[str, str]:
@@ -315,6 +363,142 @@ def _parse_auth_state(state: str | None) -> dict[str, str]:
                 return {}
         except Exception:
                 return {}
+
+
+def _sync_admin_on_login(userinfo: dict[str, str]) -> dict:
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+
+    email = str(userinfo.get("email") or "").strip().lower()
+    full_name = str(userinfo.get("name") or "").strip() or email.split("@", 1)[0]
+    if not email:
+        raise HTTPException(status_code=400, detail="Google user info did not include email.")
+
+    auth_user_id = _get_or_create_auth_user_id(email=email, full_name=full_name)
+    if not auth_user_id:
+        raise HTTPException(status_code=502, detail="Failed to provision Supabase auth user for admin.")
+
+    query = urlencode(
+        {
+            "select": "id,full_name,email",
+            "email": f"eq.{email}",
+            "limit": "1",
+        }
+    )
+    get_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/admins?{query}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(get_req, timeout=20) as response:
+            existing = json.loads(response.read().decode("utf-8"))
+            if isinstance(existing, list) and existing:
+                return existing[0]
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase admins lookup failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    insert_payload = [
+        {
+            "id": auth_user_id,
+            "full_name": full_name,
+            "email": email,
+        }
+    ]
+    insert_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/admins",
+        data=json.dumps(insert_payload).encode("utf-8"),
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Prefer": "return=representation",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlrequest.urlopen(insert_req, timeout=20) as response:
+            created = json.loads(response.read().decode("utf-8"))
+            if isinstance(created, list) and created:
+                return created[0]
+            return {}
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase admin create failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+
+def _get_or_create_auth_user_id(email: str, full_name: str) -> str | None:
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+
+    list_req = urlrequest.Request(
+        f"{supabase_url}/auth/v1/admin/users?email={urlencode({'': email})[1:]}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(list_req, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            if isinstance(payload, dict):
+                users = payload.get("users") or []
+                if users:
+                    user_id = users[0].get("id")
+                    if user_id:
+                        return str(user_id)
+    except HTTPError:
+        # Continue to create if lookup fails.
+        pass
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    create_payload = {
+        "email": email,
+        "email_confirm": True,
+        "user_metadata": {"full_name": full_name},
+    }
+    create_req = urlrequest.Request(
+        f"{supabase_url}/auth/v1/admin/users",
+        data=json.dumps(create_payload).encode("utf-8"),
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlrequest.urlopen(create_req, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            user_id = payload.get("id") if isinstance(payload, dict) else None
+            return str(user_id) if user_id else None
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase auth user create failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
 
 
 def _popup_response(origin: str, payload: dict[str, str]) -> HTMLResponse:
@@ -537,7 +721,43 @@ def google_auth_start(
         raise HTTPException(status_code=500, detail="Missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI configuration.")
 
     app_origin = origin or request.headers.get("origin") or str(request.base_url).rstrip("/")
-    encoded_state = _encode_auth_state(mode=mode, origin=app_origin)
+    encoded_state = _encode_auth_state(mode=mode, origin=app_origin, role="student")
+    oauth_scopes = [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/calendar",
+    ]
+    query_params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": " ".join(oauth_scopes),
+        "state": encoded_state,
+        "access_type": "offline",
+        "prompt": "consent",
+        "include_granted_scopes": "true",
+    }
+    url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(query_params)}"
+    return {"url": url}
+
+
+@app.get("/api/v1/admin/auth/google", tags=["admin"])
+def admin_google_auth_start(
+    request: Request,
+    mode: Literal["popup", "redirect"] = Query(default="redirect"),
+    origin: str | None = Query(default=None),
+) -> dict[str, str]:
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    if not redirect_uri:
+        redirect_uri = f"{str(request.base_url).rstrip('/')}/api/v1/auth/callback"
+
+    if not client_id or not redirect_uri:
+        raise HTTPException(status_code=500, detail="Missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI configuration.")
+
+    app_origin = origin or request.headers.get("origin") or str(request.base_url).rstrip("/")
+    encoded_state = _encode_auth_state(mode=mode, origin=app_origin, role="admin")
     oauth_scopes = [
         "openid",
         "email",
@@ -570,6 +790,7 @@ def google_callback(
     parsed_state = _parse_auth_state(state)
     mode = parsed_state.get("mode", "")
     app_origin = parsed_state.get("origin")
+    role = parsed_state.get("role", "student")
     is_popup_flow = mode in {"popup", "redirect"} and bool(app_origin)
 
     if error:
@@ -630,7 +851,8 @@ def google_callback(
         raise HTTPException(status_code=400, detail="Google did not return an access token.")
 
     userinfo = _fetch_google_userinfo(str(access_token))
-    student_record = _sync_student_on_login(userinfo)
+    student_record = _sync_student_on_login(userinfo) if role != "admin" else None
+    admin_record = _sync_admin_on_login(userinfo) if role == "admin" else None
     user_sub = userinfo.get("sub")
     user_email = userinfo.get("email")
 
@@ -638,10 +860,11 @@ def google_callback(
         raise HTTPException(status_code=400, detail="Google user info did not include sub/email.")
 
     if is_popup_flow and app_origin:
+        redirect_path = "/admin/dashboard" if role == "admin" else "/dashboard"
         if mode == "popup":
             return _popup_response(app_origin, {"type": "google-oauth-success", "accessToken": str(access_token)})
         return RedirectResponse(
-            url=f"{app_origin}/dashboard?access_token={str(access_token)}",
+            url=f"{app_origin}{redirect_path}?access_token={str(access_token)}",
             status_code=307,
         )
 
@@ -669,6 +892,7 @@ def google_callback(
         "session_token": session_jwt,
         "session_expires_in": ttl_seconds,
         "student_id": student_record.get("id") if isinstance(student_record, dict) else None,
+        "admin_id": admin_record.get("id") if isinstance(admin_record, dict) else None,
         "user_id": user_sub,
         "email": user_email,
         "access_token": token_data.get("access_token"),
@@ -689,6 +913,7 @@ def google_auth_callback_compat(
     parsed_state = _parse_auth_state(state)
     mode = parsed_state.get("mode", "redirect")
     app_origin = parsed_state.get("origin") or request.headers.get("origin") or "http://localhost:3000"
+    role = parsed_state.get("role", "student")
 
     if error:
         if mode == "popup":
@@ -738,13 +963,16 @@ def google_auth_callback_compat(
         return RedirectResponse(url=f"{app_origin}/dashboard?error=missing_access_token", status_code=307)
 
     userinfo = _fetch_google_userinfo(access_token)
-    _sync_student_on_login(userinfo)
+    if role == "admin":
+        _sync_admin_on_login(userinfo)
+    else:
+        _sync_student_on_login(userinfo)
 
     if mode == "popup":
         return _popup_response(app_origin, {"type": "google-oauth-success", "accessToken": access_token})
 
     return RedirectResponse(
-        url=f"{app_origin}/dashboard?access_token={access_token}",
+        url=f"{app_origin}{'/admin/dashboard' if role == 'admin' else '/dashboard'}?access_token={access_token}",
         status_code=307,
     )
 
@@ -977,6 +1205,137 @@ def rag_query(payload: RagQueryRequest) -> RagQueryResponse:
     selected_contexts = ranked[: payload.top_k]
     answer = _generate_answer_from_context(payload.query, selected_contexts)
     return RagQueryResponse(answer=answer, contexts=selected_contexts)
+
+
+@app.get("/api/v1/universities", tags=["admin"])
+def list_universities(access_token: str = Query(...)) -> dict[str, list[dict]]:
+    _require_admin(access_token)
+
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+
+    query = urlencode(
+        {
+            "select": "id,name,country,description,admission_requirements,average_cost_usd,scholarships_available",
+            "order": "created_at.desc",
+            "limit": "200",
+        }
+    )
+    req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/universities?{query}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(req, timeout=20) as response:
+            rows = json.loads(response.read().decode("utf-8"))
+            return {"universities": rows if isinstance(rows, list) else []}
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase universities fetch failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+
+@app.get("/api/v1/admin/priority-queue", tags=["admin"])
+def get_priority_queue(access_token: str = Query(...)) -> dict[str, list[dict]]:
+    _require_admin(access_token)
+
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+
+    sessions_query = urlencode(
+        {
+            "select": "student_id,lead_score,classification,created_at",
+            "order": "lead_score.desc,created_at.desc",
+            "limit": "12",
+        }
+    )
+    sessions_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/call_sessions?{sessions_query}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(sessions_req, timeout=20) as response:
+            sessions = json.loads(response.read().decode("utf-8"))
+            if not isinstance(sessions, list):
+                sessions = []
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase call sessions fetch failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    student_ids = [row.get("student_id") for row in sessions if row.get("student_id")]
+    unique_ids = list(dict.fromkeys(student_ids))
+    if not unique_ids:
+        return {"students": []}
+
+    in_values = ",".join(unique_ids)
+    students_query = urlencode(
+        {
+            "select": "id,full_name,email,phone_number",
+            "id": f"in.({in_values})",
+        }
+    )
+    students_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/students?{students_query}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(students_req, timeout=20) as response:
+            students_rows = json.loads(response.read().decode("utf-8"))
+            if not isinstance(students_rows, list):
+                students_rows = []
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase students fetch failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    student_lookup = {row.get("id"): row for row in students_rows if row.get("id")}
+    results: list[dict[str, str]] = []
+    for row in sessions:
+        student_id = row.get("student_id")
+        if not student_id:
+            continue
+        student = student_lookup.get(student_id, {})
+        lead_score = row.get("lead_score")
+        classification = row.get("classification")
+        priority_label = classification or ("High" if (lead_score or 0) >= 75 else "Medium" if (lead_score or 0) >= 50 else "Low")
+        stage_label = f"Lead score {lead_score}" if lead_score is not None else "Lead score TBD"
+
+        results.append(
+            {
+                "id": student_id,
+                "full_name": student.get("full_name") or "Unnamed Student",
+                "stage": stage_label,
+                "priority": priority_label,
+            }
+        )
+
+    return {"students": results}
 
 
 @app.get("/api/v1/dashboard/metrics", tags=["dashboard"])

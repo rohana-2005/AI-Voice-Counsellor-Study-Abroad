@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { GraduationCap, Menu, X } from 'lucide-react';
 import { useState } from 'react';
+import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 
 const navLinks = [
   { label: 'Home',         href: '/' },
@@ -14,8 +15,10 @@ const navLinks = [
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const { isAuthenticated } = useAuthSession();
 
   const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
 
@@ -48,8 +51,42 @@ export default function Navbar() {
     }
   };
 
+  const handleAdmin = async () => {
+    if (isSigningIn) {
+      return;
+    }
+
+    setIsSigningIn(true);
+    try {
+      const res = await fetch(
+        `${backendBaseUrl}/api/v1/admin/auth/google?mode=redirect&origin=${encodeURIComponent(window.location.origin)}`,
+        { credentials: 'include' }
+      );
+
+      if (!res.ok) {
+        setIsSigningIn(false);
+        return;
+      }
+
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) {
+        setIsSigningIn(false);
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch {
+      setIsSigningIn(false);
+    }
+  };
+
   // Hide on app pages
-  if (pathname?.startsWith('/dashboard') || pathname?.startsWith('/session') || pathname?.startsWith('/report')) {
+  if (
+    pathname?.startsWith('/dashboard') ||
+    pathname?.startsWith('/session') ||
+    pathname?.startsWith('/report') ||
+    pathname?.startsWith('/admin')
+  ) {
     return null;
   }
 
@@ -104,6 +141,19 @@ export default function Navbar() {
 
           {/* CTAs */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={handleAdmin}
+              disabled={isSigningIn}
+              style={{
+                fontSize: '14px', fontWeight: 600, color: '#1d4ed8',
+                background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.25)',
+                cursor: isSigningIn ? 'not-allowed' : 'pointer',
+                padding: '8px 14px', borderRadius: '10px',
+                opacity: isSigningIn ? 0.7 : 1,
+              }}
+            >
+              Admin
+            </button>
             <button
               onClick={handleSignIn}
               disabled={isSigningIn}
