@@ -3,10 +3,10 @@ import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Send, Mic, MicOff, GraduationCap, Phone } from 'lucide-react';
 import Link from 'next/link';
-import AvatarBox from '@/components/shared/AvatarBox';
 import ChatBubble from '@/components/shared/ChatBubble';
 import UniversityCard from '@/components/shared/UniversityCard';
 import { callSession, universityRecommendations } from '@/lib/mockData';
+import { createClient } from '@anam-ai/js-sdk';
 
 export default function SessionPage() {
   const [messages, setMessages] = useState(callSession.transcript);
@@ -15,6 +15,7 @@ export default function SessionPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [showRecs, setShowRecs] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const aiResponses = [
     "That's a great question! Let me analyze your profile against the latest university data...",
@@ -27,6 +28,44 @@ export default function SessionPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    let client: any = null;
+
+    const startSession = async () => {
+      try {
+        const res = await fetch("http://localhost:8000/anam/session", {
+          method: "POST",
+        });
+        const data = await res.json();
+        
+        // Fast API returns session_token in snake_case, SDK might want either
+        const token = data.session_token || data.sessionToken;
+        
+        if (!token) {
+            console.error("Missing session token in backend response:", data);
+            return;
+        }
+
+        client = createClient(token);
+
+        // Using string ID to prevent the client context binding error
+        if (videoRef.current) {
+            await client.streamToVideoElement("anam-video-element");
+        }
+      } catch (error) {
+        console.error("Failed to start Anam session:", error);
+      }
+    };
+
+    startSession();
+
+    return () => {
+      if (client?.stopStreaming) {
+        client.stopStreaming();
+      }
+    };
+  }, []);
 
   const handleSend = async () => {
     if (!inputValue.trim()) return;
@@ -83,7 +122,16 @@ export default function SessionPage() {
 
         {/* Left: Avatar column */}
         <div className="lg:w-80 flex flex-col gap-4">
-          <AvatarBox isActive={isListening || isTyping} label="AI Voice Avatar will stream here" />
+          <div className="relative w-full aspect-[3/4] bg-slate-800 rounded-3xl overflow-hidden border-4 border-slate-700/50 shadow-xl">
+            <video
+              id="anam-video-element"
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted={false}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          </div>
 
           {/* Session stats */}
           <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 space-y-3">
