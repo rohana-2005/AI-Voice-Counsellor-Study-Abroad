@@ -90,10 +90,12 @@ function extractErrorMessage(err: unknown): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function Avatar() {
+export default function Avatar({ studentId }: { studentId?: string }) {
   // Session state
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -128,6 +130,8 @@ export default function Avatar() {
     isStartingRef.current = true;
     setStatus('connecting');
     setErrorMsg(null);
+    setSavedSessionId(null);
+    setSaveErrorMsg(null);
 
     try {
       const res = await fetch('http://localhost:8000/anam/session', { method: 'POST' });
@@ -327,13 +331,30 @@ export default function Avatar() {
     }
 
     try {
-      await fetch('http://localhost:8000/save-session', {
+      const res = await fetch('http://localhost:8000/save-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: transcriptRef.current }),
+        body: JSON.stringify({ transcript: transcriptRef.current, student_id: studentId }),
       });
-      console.log('[Avatar] Transcript saved successfully.');
+      const payload = (await res.json().catch(() => ({}))) as {
+        detail?: unknown;
+        status?: string;
+        message?: string;
+        inserted?: { id?: string };
+      };
+      if (!res.ok || payload.status === 'error') {
+        const detail = typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload.detail ?? payload);
+        throw new Error(detail || payload.message || `HTTP ${res.status}`);
+      }
+      const insertedId = payload.inserted?.id;
+      if (typeof insertedId === 'string' && insertedId.trim()) {
+        setSavedSessionId(insertedId);
+      }
+      setSaveErrorMsg(null);
+      console.log('[Avatar] Transcript and report saved successfully.');
     } catch (err) {
+      setSavedSessionId(null);
+      setSaveErrorMsg(extractErrorMessage(err));
       console.error('[Avatar] Failed to save transcript:', err);
     }
   };
@@ -502,6 +523,14 @@ export default function Avatar() {
             </div>
             <div className="text-xs text-slate-600 font-mono">{messages.length} msgs</div>
           </div>
+
+          {(savedSessionId || saveErrorMsg) && (
+            <div className={`px-5 py-2 border-b text-[11px] font-medium ${savedSessionId ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-300'}`}>
+              {savedSessionId
+                ? `Saved Session ID: ${savedSessionId}`
+                : `Save failed: ${saveErrorMsg}`}
+            </div>
+          )}
 
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-5 space-y-3">

@@ -34,11 +34,12 @@ CREATE TABLE public.call_sessions (
   recording_url text,
   sentiment text,
   lead_score integer CHECK (lead_score >= 0 AND lead_score <= 100),
-  classification text CHECK (classification = ANY (ARRAY['Hot'::text, 'Warm'::text, 'Cold'::text])),
+  classification text CHECK (classification = ANY (ARRAY['Hot'::text, 'Warm'::text, 'Cold'::text, 'Hard'::text, 'Soft'::text])),
   score_breakdown jsonb,
   recommended_actions text,
   raw_ai_response jsonb,
   created_at timestamp with time zone DEFAULT now(),
+  detailed_report text,
   CONSTRAINT call_sessions_pkey PRIMARY KEY (id),
   CONSTRAINT call_sessions_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
 );
