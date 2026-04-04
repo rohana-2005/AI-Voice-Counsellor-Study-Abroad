@@ -7,9 +7,8 @@ import { GraduationCap } from 'lucide-react';
 
 const navLinks = [
   { label: 'Home',         href: '/' },
-  { label: 'How it works', href: '/#how-it-works' },
+  { label: 'How It Works', href: '/#how-it-works' },
   { label: 'Countries',    href: '/#countries' },
-  { label: 'Testimonials', href: '/#testimonials' },
 ];
 
 export default function Navbar() {
@@ -182,14 +181,18 @@ export default function Navbar() {
               {isSigningIn ? 'Redirecting...' : 'Sign In'}
             </button>
             <Link href="/onboarding" style={{ textDecoration: 'none' }}>
-              <button style={{
-                fontSize: '14px', fontWeight: 600, color: '#ffffff',
-                background: '#2563eb', border: 'none', cursor: 'pointer',
-                padding: '10px 20px', borderRadius: '12px',
-                boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
-                transition: 'background 0.15s',
-              }}>
-                Free Consultation
+              <button
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.04)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
+                style={{
+                  fontSize: '14px', fontWeight: 600, color: '#ffffff',
+                  background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
+                  border: 'none', cursor: 'pointer',
+                  padding: '10px 20px', borderRadius: '12px',
+                  boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
+                  transition: 'all 0.2s ease',
+                }}>
+                Start Free Consultation
               </button>
             </Link>
           </div>
