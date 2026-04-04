@@ -231,6 +231,9 @@ class AppointmentCreateRequest(BaseModel):
     provider: Literal["google_calendar", "calendly"] = "google_calendar"
 
 
+class SaveSessionRequest(BaseModel):
+    transcript: str
+
 class CallWebhookRequest(BaseModel):
     call_id: str
     event_type: str
@@ -994,6 +997,45 @@ class SessionTokenRequest(BaseModel):
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/save-session", tags=["session"])
+async def save_session(request: SaveSessionRequest) -> dict[str, str]:
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE credentials.")
+
+    payload = [
+        {
+            "transcript": request.transcript
+        }
+    ]
+    
+    insert_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/call_sessions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Prefer": "return=minimal"
+        },
+        method="POST",
+    )
+
+    try:
+        with urlrequest.urlopen(insert_req, timeout=10) as response:
+            if response.status >= 400:
+                raise HTTPException(status_code=response.status, detail="Failed to save transcript to Supabase")
+            return {"status": "saved"}
+    except HTTPError as err:
+        body = err.read().decode('utf-8', errors='ignore')
+        print(f"Supabase HTTPError: {err.reason}, Body: {body}")
+        raise HTTPException(status_code=502, detail=f"Supabase create failed: {err.reason}, {body}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
 
 
 @app.post("/anam/session", response_model=SessionTokenResponse)

@@ -326,11 +326,17 @@ export default function Avatar() {
       } catch {/* ignore */}
     }
 
+    // Build the transcript from the live UI messages directly,
+    // ensuring we capture partially streamed sentences that haven't triggered endOfSpeech yet.
+    const finalTranscript = messages
+      .map((m) => `[${m.role === 'ai' ? 'AI' : 'USER'}]: ${m.text}`)
+      .join('\n');
+
     try {
       await fetch('http://localhost:8000/save-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: transcriptRef.current }),
+        body: JSON.stringify({ transcript: finalTranscript || transcriptRef.current }),
       });
       console.log('[Avatar] Transcript saved successfully.');
     } catch (err) {
