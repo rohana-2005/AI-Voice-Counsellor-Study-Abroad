@@ -1,13 +1,19 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, CheckCircle2, Clock, Video } from 'lucide-react';
+import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 
-const seedEvents = [
-  { label: 'IELTS Preparation Session',     time: '3:00 PM',  date: 'Apr 8',  color: '#2563eb' },
-  { label: 'SOP Review with Counselor',     time: '11:00 AM', date: 'Apr 12', color: '#7c3aed' },
-  { label: 'University Shortlisting Call',  time: '4:30 PM',  date: 'Apr 18', color: '#16a34a' },
-];
+type CalendarEvent = {
+  id: string;
+  label: string;
+  time: string;
+  date: string;
+  color: string;
+  link?: string;
+};
+
+const colorPalette = ['#2563eb', '#7c3aed', '#16a34a', '#ea580c', '#0f766e'];
 
 export default function CalendarCard() {
   const backendBaseUrl = useMemo(
@@ -22,9 +28,7 @@ export default function CalendarCard() {
     }
   }, [backendBaseUrl]);
 
-  const [accessToken, setAccessToken] = useState('');
-  const [authStatus, setAuthStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
-  const [authError, setAuthError] = useState('');
+  const { accessToken } = useAuthSession();
 
   const [subject, setSubject] = useState('Counselling Session');
   const [description, setDescription] = useState('Booked from StudyAbroad.AI dashboard');
@@ -36,62 +40,62 @@ export default function CalendarCard() {
   const [bookingMessage, setBookingMessage] = useState('');
   const [bookingLink, setBookingLink] = useState('');
   const [isBooking, setIsBooking] = useState(false);
-  const [calendarPreviewNonce, setCalendarPreviewNonce] = useState(0);
-  const [upcomingEvents, setUpcomingEvents] = useState(seedEvents);
-  const popupRef = useRef<Window | null>(null);
+  const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
 
-  useEffect(() => {
-    const receiveMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin && event.origin !== backendOrigin) {
+  const loadEvents = useCallback(
+    async (token = accessToken) => {
+      if (!token) {
         return;
       }
 
-      const payload = event.data as { type?: string; accessToken?: string; error?: string };
-      if (payload?.type === 'google-oauth-success' && payload.accessToken) {
-        setAccessToken(payload.accessToken);
-        setAuthStatus('connected');
-        setAuthError('');
-      }
+      try {
+        const url = `${backendBaseUrl}/api/v1/calendar/events?access_token=${encodeURIComponent(token)}`;
+        const res = await fetch(url, { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data.events)) {
+          return;
+        }
 
-      if (payload?.type === 'google-oauth-error') {
-        setAuthStatus('error');
-        setAuthError(payload.error || 'Authentication failed');
-      }
-    };
+        const mapped: CalendarEvent[] = data.events.map(
+          (item: { id?: string; summary?: string; start?: string; htmlLink?: string }, index: number) => {
+            const start = item.start ? new Date(item.start) : new Date();
+            const isValid = !Number.isNaN(start.getTime());
+            return {
+              id: item.id || `evt-${index}`,
+              label: item.summary || 'Untitled Event',
+              date: isValid
+                ? start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                : 'TBD',
+              time: isValid
+                ? start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                : 'TBD',
+              color: colorPalette[index % colorPalette.length],
+              link: item.htmlLink,
+            };
+          }
+        );
 
-    window.addEventListener('message', receiveMessage);
-    return () => window.removeEventListener('message', receiveMessage);
-  }, [backendOrigin]);
+        setUpcomingEvents(mapped);
+      } catch {
+        // Keep UI responsive even if events fetch fails.
+      }
+    },
+    [accessToken, backendBaseUrl]
+  );
+
+  useEffect(() => {
+    if (!accessToken) {
+      setUpcomingEvents([]);
+      return;
+    }
+
+    void loadEvents(accessToken);
+  }, [accessToken, backendOrigin, loadEvents]);
 
   const canSchedule = useMemo(
     () => Boolean(accessToken && subject.trim() && date && time && duration),
     [accessToken, subject, date, time, duration]
   );
-
-  const connectCalendar = async () => {
-    setAuthStatus('connecting');
-    setAuthError('');
-
-    try {
-      const url = `${backendBaseUrl}/api/v1/auth/google?mode=popup&origin=${encodeURIComponent(window.location.origin)}`;
-      const res = await fetch(url, { credentials: 'include' });
-      const data = await res.json();
-
-      popupRef.current = window.open(
-        data.url,
-        'google-calendar-auth',
-        'width=500,height=700,menubar=no,toolbar=no,location=no,status=no'
-      );
-
-      if (!popupRef.current) {
-        setAuthStatus('error');
-        setAuthError('Popup blocked. Please allow popups and try again.');
-      }
-    } catch {
-      setAuthStatus('error');
-      setAuthError('Could not start Google authentication');
-    }
-  };
 
   const bookMeeting = async () => {
     const startLocal = new Date(`${date}T${time}:00`);
@@ -135,10 +139,12 @@ export default function CalendarCard() {
 
       setUpcomingEvents((prev) => [
         {
+          id: data.eventId || `local-${Date.now()}`,
           label: subject,
           date: displayDate,
           time: displayTime,
           color: '#2563eb',
+          link: data.htmlLink || undefined,
         },
         ...prev,
       ]);
@@ -146,16 +152,13 @@ export default function CalendarCard() {
       setBookedCount((prev) => prev + 1);
       setBookingMessage('Meeting scheduled and pushed to Google Calendar.');
       setBookingLink(data.htmlLink || '');
-      setCalendarPreviewNonce((prev) => prev + 1);
+      void loadEvents();
     } catch {
       setBookingMessage('Network error while scheduling meeting.');
     } finally {
       setIsBooking(false);
     }
   };
-
-  const calendarEmbedUrl =
-    'https://calendar.google.com/calendar/embed?src=ruchigadgil%40gmail.com&ctz=Asia%2FKolkata';
 
   return (
     <motion.div
@@ -196,18 +199,9 @@ export default function CalendarCard() {
               {bookedCount} booked
             </span>
           ) : null}
-          <button
-            onClick={connectCalendar}
-            disabled={authStatus === 'connecting'}
-            style={{
-              fontSize: '12px', fontWeight: 600, color: '#2563eb',
-              background: '#eff6ff', border: 'none', borderRadius: '8px',
-              padding: '6px 12px', cursor: authStatus === 'connecting' ? 'not-allowed' : 'pointer',
-              opacity: authStatus === 'connecting' ? 0.75 : 1,
-            }}
-          >
-            {authStatus === 'connecting' ? 'Connecting...' : accessToken ? 'Connected' : 'Connect Calendar'}
-          </button>
+            <span style={{ fontSize: '12px', color: '#1d4ed8', fontWeight: 600 }}>
+              Calendar Linked
+            </span>
         </div>
       </div>
 
@@ -228,8 +222,6 @@ export default function CalendarCard() {
             <p style={{ fontSize: '11px', color: '#64748b' }}>No page redirect. Stay on dashboard and book inline.</p>
           </div>
         </div>
-
-        {authError ? <p style={{ fontSize: '11px', color: '#b91c1c', marginBottom: '8px' }}>{authError}</p> : null}
 
         <div style={{ display: 'grid', gap: '8px' }}>
           <input
@@ -303,27 +295,15 @@ export default function CalendarCard() {
         ) : null}
       </div>
 
-      {/* Calendar preview */}
-      <div style={{
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        marginBottom: '14px',
-        background: '#ffffff',
-      }}>
-        <iframe
-          key={calendarPreviewNonce}
-          src={calendarEmbedUrl}
-          title="Google Calendar Preview"
-          style={{ width: '100%', height: 260, border: 0, display: 'block' }}
-          scrolling="no"
-        />
-      </div>
-
       {/* Event list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {upcomingEvents.map((ev, i) => (
-          <div key={i} style={{
+        {upcomingEvents.length === 0 ? (
+          <div style={{ fontSize: '12px', color: '#64748b', padding: '8px 4px' }}>
+            No upcoming events found on your calendar.
+          </div>
+        ) : null}
+        {upcomingEvents.map((ev) => (
+          <div key={ev.id} style={{
             display: 'flex', alignItems: 'center', gap: '10px',
             padding: '10px 12px', borderRadius: '10px', cursor: 'pointer',
             transition: 'background 0.12s',
@@ -333,12 +313,18 @@ export default function CalendarCard() {
           >
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: ev.color, flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: '13px', fontWeight: 500, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{ev.label}</p>
+              <p style={{ fontSize: '13px', fontWeight: 500, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+                {ev.link ? (
+                  <a href={ev.link} target="_blank" rel="noreferrer" style={{ color: '#334155', textDecoration: 'none' }}>
+                    {ev.label}
+                  </a>
+                ) : (
+                  ev.label
+                )}
+              </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-              <Clock size={11} color="#94a3b8" />
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>{ev.date} · {ev.time}</span>
-            </div>
+            <Clock size={11} color="#94a3b8" />
+            <span style={{ fontSize: '11px', color: '#94a3b8' }}>{ev.date} · {ev.time}</span>
           </div>
         ))}
       </div>

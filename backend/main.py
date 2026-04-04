@@ -46,10 +46,24 @@ app = FastAPI(
 )
 
 
-frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+frontend_origin_env = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+frontend_origins = [origin.strip() for origin in frontend_origin_env.split(",") if origin.strip()]
+if not frontend_origins:
+    frontend_origins = ["http://localhost:3000"]
+
+dev_defaults = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+]
+for origin in dev_defaults:
+    if origin not in frontend_origins:
+        frontend_origins.append(origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_origin],
+    allow_origins=frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,6 +101,89 @@ def _fetch_google_userinfo(access_token: str) -> dict[str, str]:
         raise HTTPException(status_code=400, detail=f"Failed to fetch Google user profile: {detail}") from err
     except URLError as err:
         raise HTTPException(status_code=502, detail=f"Google userinfo endpoint unreachable: {err.reason}") from err
+
+
+def _sync_student_on_login(userinfo: dict[str, str]) -> dict:
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+
+    email = str(userinfo.get("email") or "").strip().lower()
+    google_sub = str(userinfo.get("sub") or "").strip()
+    if not email or not google_sub:
+        raise HTTPException(status_code=400, detail="Google user info did not include required email/sub.")
+
+    query = urlencode(
+        {
+            "select": "id,full_name,email,phone_number,location",
+            "email": f"eq.{email}",
+            "limit": "1",
+        }
+    )
+    get_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/students?{query}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(get_req, timeout=20) as response:
+            existing = json.loads(response.read().decode("utf-8"))
+            if isinstance(existing, list) and existing:
+                return existing[0]
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase students lookup failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    full_name = str(userinfo.get("name") or email.split("@")[0]).strip()
+    location = str(userinfo.get("locale") or "").strip() or None
+    phone_number = str(userinfo.get("phone_number") or f"pending-{google_sub}").strip()
+
+    insert_payload = [
+        {
+            "full_name": full_name,
+            "email": email,
+            "phone_number": phone_number,
+            "location": location,
+        }
+    ]
+    insert_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/students",
+        data=json.dumps(insert_payload).encode("utf-8"),
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Prefer": "return=representation",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlrequest.urlopen(insert_req, timeout=20) as response:
+            created = json.loads(response.read().decode("utf-8"))
+            if isinstance(created, list) and created:
+                return created[0]
+            return {}
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase student create failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+
+def _is_student_onboarding_complete(student: dict) -> bool:
+    phone_number = str(student.get("phone_number") or "")
+    full_name = str(student.get("full_name") or "").strip()
+    return bool(full_name and phone_number and not phone_number.startswith("pending-"))
 
 
 class LeadProfile(BaseModel):
@@ -158,6 +255,13 @@ class CalendarBookRequest(BaseModel):
     endTime: datetime
     subject: str | None = None
     description: str | None = None
+
+
+class StudentCompleteRequest(BaseModel):
+    access_token: str
+    full_name: str = Field(min_length=1)
+    phone_number: str = Field(min_length=6)
+    location: str | None = None
 
 
 def _extract_terms(text: str) -> list[str]:
@@ -419,17 +523,25 @@ def google_auth_start(
 ) -> dict[str, str]:
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    if not redirect_uri:
+        redirect_uri = f"{str(request.base_url).rstrip('/')}/api/v1/auth/callback"
 
     if not client_id or not redirect_uri:
         raise HTTPException(status_code=500, detail="Missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI configuration.")
 
     app_origin = origin or request.headers.get("origin") or str(request.base_url).rstrip("/")
     encoded_state = _encode_auth_state(mode=mode, origin=app_origin)
+    oauth_scopes = [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/calendar",
+    ]
     query_params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
-        "scope": "https://www.googleapis.com/auth/calendar",
+        "scope": " ".join(oauth_scopes),
         "state": encoded_state,
         "access_type": "offline",
         "prompt": "consent",
@@ -510,6 +622,14 @@ def google_callback(
             return RedirectResponse(url=f"{app_origin}/dashboard?error=missing_access_token", status_code=307)
         raise HTTPException(status_code=400, detail="Google did not return an access token.")
 
+    userinfo = _fetch_google_userinfo(str(access_token))
+    student_record = _sync_student_on_login(userinfo)
+    user_sub = userinfo.get("sub")
+    user_email = userinfo.get("email")
+
+    if not user_sub or not user_email:
+        raise HTTPException(status_code=400, detail="Google user info did not include sub/email.")
+
     if is_popup_flow and app_origin:
         if mode == "popup":
             return _popup_response(app_origin, {"type": "google-oauth-success", "accessToken": str(access_token)})
@@ -517,12 +637,6 @@ def google_callback(
             url=f"{app_origin}/dashboard?access_token={str(access_token)}",
             status_code=307,
         )
-
-    userinfo = _fetch_google_userinfo(access_token)
-    user_sub = userinfo.get("sub")
-    user_email = userinfo.get("email")
-    if not user_sub or not user_email:
-        raise HTTPException(status_code=400, detail="Google user info did not include sub/email.")
 
     supabase_jwt_secret = os.getenv("SUPABASE_JWT_SECRET")
     if not supabase_jwt_secret:
@@ -547,6 +661,7 @@ def google_callback(
         "state": state,
         "session_token": session_jwt,
         "session_expires_in": ttl_seconds,
+        "student_id": student_record.get("id") if isinstance(student_record, dict) else None,
         "user_id": user_sub,
         "email": user_email,
         "access_token": token_data.get("access_token"),
@@ -614,6 +729,9 @@ def google_auth_callback_compat(
         if mode == "popup":
             return _popup_response(app_origin, {"type": "google-oauth-error", "error": "missing_access_token"})
         return RedirectResponse(url=f"{app_origin}/dashboard?error=missing_access_token", status_code=307)
+
+    userinfo = _fetch_google_userinfo(access_token)
+    _sync_student_on_login(userinfo)
 
     if mode == "popup":
         return _popup_response(app_origin, {"type": "google-oauth-success", "accessToken": access_token})
@@ -729,6 +847,120 @@ def book_calendar_event(payload: CalendarBookRequest):
         raise HTTPException(status_code=400, detail=f"Failed to create calendar event: {detail}") from err
     except URLError as err:
         raise HTTPException(status_code=502, detail=f"Google Calendar API unreachable: {err.reason}") from err
+
+
+@app.get("/api/v1/calendar/events", tags=["appointments"])
+def get_calendar_events(
+    access_token: str = Query(...),
+    max_results: int = Query(default=10, ge=1, le=50),
+):
+    now_utc = datetime.utcnow().isoformat() + "Z"
+    params = urlencode(
+        {
+            "maxResults": str(max_results),
+            "singleEvents": "true",
+            "orderBy": "startTime",
+            "timeMin": now_utc,
+        }
+    )
+    req = urlrequest.Request(
+        f"https://www.googleapis.com/calendar/v3/calendars/primary/events?{params}",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(req, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            items = payload.get("items", []) if isinstance(payload, dict) else []
+            events = []
+            for item in items:
+                start_obj = item.get("start", {}) if isinstance(item, dict) else {}
+                start_time = start_obj.get("dateTime") or start_obj.get("date")
+                events.append(
+                    {
+                        "id": item.get("id"),
+                        "summary": item.get("summary") or "Untitled Event",
+                        "start": start_time,
+                        "htmlLink": item.get("htmlLink"),
+                    }
+                )
+
+            return {"success": True, "events": events}
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=400, detail=f"Failed to fetch calendar events: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Google Calendar API unreachable: {err.reason}") from err
+
+
+@app.get("/api/v1/auth/google/profile", tags=["auth"])
+def get_google_profile(access_token: str = Query(...)) -> dict[str, str | bool | None]:
+    profile = _fetch_google_userinfo(access_token)
+    student = _sync_student_on_login(profile)
+    return {
+        "sub": profile.get("sub"),
+        "student_id": student.get("id") if isinstance(student, dict) else None,
+        "full_name": profile.get("name"),
+        "email": profile.get("email"),
+        "picture": profile.get("picture"),
+        "phone_number": student.get("phone_number") if isinstance(student, dict) else None,
+        "location": student.get("location") if isinstance(student, dict) else None,
+        "needs_onboarding": not _is_student_onboarding_complete(student if isinstance(student, dict) else {}),
+    }
+
+
+@app.post("/api/v1/students/complete", tags=["auth"])
+def complete_student_profile(payload: StudentCompleteRequest) -> dict[str, str | bool | None]:
+    profile = _fetch_google_userinfo(payload.access_token)
+    student = _sync_student_on_login(profile)
+    student_id = student.get("id") if isinstance(student, dict) else None
+    if not student_id:
+        raise HTTPException(status_code=400, detail="Student record not found for current login.")
+
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+
+    update_payload = {
+        "full_name": payload.full_name.strip(),
+        "phone_number": payload.phone_number.strip(),
+        "location": payload.location.strip() if payload.location else None,
+    }
+    update_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/students?id=eq.{student_id}",
+        data=json.dumps(update_payload).encode("utf-8"),
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Prefer": "return=representation",
+        },
+        method="PATCH",
+    )
+
+    try:
+        with urlrequest.urlopen(update_req, timeout=20) as response:
+            rows = json.loads(response.read().decode("utf-8"))
+            updated = rows[0] if isinstance(rows, list) and rows else {}
+            return {
+                "student_id": updated.get("id"),
+                "full_name": updated.get("full_name"),
+                "email": updated.get("email"),
+                "phone_number": updated.get("phone_number"),
+                "location": updated.get("location"),
+                "needs_onboarding": not _is_student_onboarding_complete(updated),
+            }
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=400, detail=f"Failed to complete student profile: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
 
 
 @app.post("/api/v1/rag/query", response_model=RagQueryResponse, tags=["rag"])

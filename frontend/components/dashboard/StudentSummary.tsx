@@ -2,6 +2,7 @@
 import { motion } from 'framer-motion';
 import { MapPin, Mail, Phone, BookOpen, Globe2, Calendar, DollarSign, FlaskConical } from 'lucide-react';
 import { student, academicProfile } from '@/lib/mockData';
+import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 
 const infoRows = [
   { icon: BookOpen,    label: 'Education',  value: academicProfile.edu_level,       iconBg: '#eff6ff', iconColor: '#2563eb' },
@@ -13,6 +14,18 @@ const infoRows = [
 ];
 
 export default function StudentSummary() {
+  const { profile } = useAuthSession();
+  const displayName = profile?.full_name || student.full_name;
+  const displayEmail = profile?.email || student.email;
+  const displayPhone = profile?.phone_number || student.phone_number;
+  const displayLocation = profile?.location || student.location;
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'US';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -35,13 +48,13 @@ export default function StudentSummary() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 4px 12px rgba(37,99,235,0.25)', flexShrink: 0,
           }}>
-            <span style={{ color: '#ffffff', fontSize: '18px', fontWeight: 700 }}>AS</span>
+            <span style={{ color: '#ffffff', fontSize: '18px', fontWeight: 700 }}>{initials}</span>
           </div>
           <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{student.full_name}</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{displayName}</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
               <MapPin size={12} color="#94a3b8" />
-              <span style={{ fontSize: '12px', color: '#64748b' }}>{student.location}</span>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>{displayLocation}</span>
             </div>
           </div>
         </div>
@@ -55,8 +68,8 @@ export default function StudentSummary() {
       {/* Contact */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
         {[
-          { Icon: Mail,  val: student.email },
-          { Icon: Phone, val: student.phone_number },
+          { Icon: Mail,  val: displayEmail },
+          { Icon: Phone, val: displayPhone },
         ].map(({ Icon, val }) => (
           <div key={val} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: 28, height: 28, borderRadius: '8px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

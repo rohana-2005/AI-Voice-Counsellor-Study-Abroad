@@ -7,6 +7,7 @@ import {
   Settings, GraduationCap, LogOut, ChevronRight,
 } from 'lucide-react';
 import { student } from '@/lib/mockData';
+import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 
 const navItems = [
   { label: 'Dashboard',   href: '/dashboard', icon: LayoutDashboard },
@@ -18,6 +19,15 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { profile } = useAuthSession();
+  const displayName = profile?.full_name || student.full_name;
+  const displayEmail = profile?.email || student.email;
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'US';
 
   return (
     <aside
@@ -168,7 +178,7 @@ export default function Sidebar() {
             flexShrink: 0,
           }}
         >
-          <span style={{ color: '#ffffff', fontSize: '11px', fontWeight: 700 }}>AS</span>
+          <span style={{ color: '#ffffff', fontSize: '11px', fontWeight: 700 }}>{initials}</span>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p
@@ -181,7 +191,7 @@ export default function Sidebar() {
               whiteSpace: 'nowrap',
             }}
           >
-            {student.full_name}
+            {displayName}
           </p>
           <p
             style={{
@@ -192,7 +202,7 @@ export default function Sidebar() {
               whiteSpace: 'nowrap',
             }}
           >
-            {student.email}
+            {displayEmail}
           </p>
         </div>
         <button

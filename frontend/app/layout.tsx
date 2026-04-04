@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/layout/Navbar";
+import { AuthSessionProvider } from "@/components/auth/AuthSessionProvider";
+import AuthRouteWrapper from "@/components/auth/AuthRouteWrapper";
 
 export const metadata: Metadata = {
   title: "StudyAbroad.AI – AI-Powered Study Abroad Counselor",
@@ -26,8 +28,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className="antialiased">
-        <Navbar />
-        {children}
+        <AuthSessionProvider>
+          <Navbar />
+          <AuthRouteWrapper>{children}</AuthRouteWrapper>
+        </AuthSessionProvider>
       </body>
     </html>
   );

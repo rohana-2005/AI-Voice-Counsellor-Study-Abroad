@@ -15,6 +15,38 @@ const navLinks = [
 export default function Navbar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+
+  const handleSignIn = async () => {
+    if (isSigningIn) {
+      return;
+    }
+
+    setIsSigningIn(true);
+    try {
+      const res = await fetch(
+        `${backendBaseUrl}/api/v1/auth/google?mode=redirect&origin=${encodeURIComponent(window.location.origin)}`,
+        { credentials: 'include' }
+      );
+
+      if (!res.ok) {
+        setIsSigningIn(false);
+        return;
+      }
+
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) {
+        setIsSigningIn(false);
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch {
+      setIsSigningIn(false);
+    }
+  };
 
   // Hide on app pages
   if (pathname?.startsWith('/dashboard') || pathname?.startsWith('/session') || pathname?.startsWith('/report')) {
@@ -72,15 +104,18 @@ export default function Navbar() {
 
           {/* CTAs */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Link href="/dashboard" style={{ textDecoration: 'none' }}>
-              <button style={{
+            <button
+              onClick={handleSignIn}
+              disabled={isSigningIn}
+              style={{
                 fontSize: '14px', fontWeight: 500, color: '#334155',
-                background: 'none', border: 'none', cursor: 'pointer',
+                background: 'none', border: 'none', cursor: isSigningIn ? 'not-allowed' : 'pointer',
                 padding: '8px 14px', borderRadius: '10px',
-              }}>
-                Sign In
-              </button>
-            </Link>
+                opacity: isSigningIn ? 0.7 : 1,
+              }}
+            >
+              {isSigningIn ? 'Redirecting...' : 'Sign In'}
+            </button>
             <Link href="/onboarding" style={{ textDecoration: 'none' }}>
               <button style={{
                 fontSize: '14px', fontWeight: 600, color: '#ffffff',
