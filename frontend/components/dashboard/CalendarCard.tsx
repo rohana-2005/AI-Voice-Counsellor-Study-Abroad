@@ -55,7 +55,6 @@ export default function CalendarCard() {
         if (!res.ok || !Array.isArray(data.events)) {
           return;
         }
-
         const mapped: CalendarEvent[] = data.events.map(
           (item: { id?: string; summary?: string; start?: string; htmlLink?: string }, index: number) => {
             const start = item.start ? new Date(item.start) : new Date();

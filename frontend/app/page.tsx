@@ -630,7 +630,7 @@ function FinalCTA() {
             Start Your Study Abroad<br />Journey Today
           </h2>
           <p style={{ fontSize: '17px', color: 'rgba(219,234,254,0.85)', marginBottom: '40px', maxWidth: '480px', margin: '0 auto 40px' }}>
-            Join 40,000+ students who've used our AI counselor to get admitted to their dream universities.
+            Join 40,000+ students who&apos;ve used our AI counselor to get admitted to their dream universities.
           </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link href="/onboarding" style={{ textDecoration: 'none' }}>

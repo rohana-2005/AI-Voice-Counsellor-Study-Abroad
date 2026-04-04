@@ -261,7 +261,7 @@ export default function ReportPage() {
 
                         <div>
                           <p className={`text-sm font-semibold ${isDone ? 'text-slate-500' : isCurrent ? 'text-blue-600' : 'text-slate-400'}`}>
-                            {step.emoji} {step.label}
+                            {step.icon} {step.label}
                           </p>
                           <p className="text-xs text-slate-400">{step.date}</p>
                           {isCurrent && (
