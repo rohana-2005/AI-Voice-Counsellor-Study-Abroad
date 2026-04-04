@@ -90,7 +90,7 @@ function extractErrorMessage(err: unknown): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function Avatar({ studentId }: { studentId?: string }) {
+export default function Avatar({ studentId, studentPhone, studentName }: { studentId?: string; studentPhone?: string; studentName?: string }) {
   // Session state
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -101,7 +101,6 @@ export default function Avatar({ studentId }: { studentId?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isMuted, setIsMuted] = useState(false);
-  const [callPhoneNumber, setCallPhoneNumber] = useState('');
   const [isCalling, setIsCalling] = useState(false);
 
   // Transcript (string that accumulates over the session)
@@ -362,19 +361,29 @@ export default function Avatar({ studentId }: { studentId?: string }) {
   };
 
   const handlePhoneCall = async () => {
-    const target = callPhoneNumber.trim();
-    if (!target) {
-      setErrorMsg('Enter a phone number in E.164 format, for example +919999999999');
+    if (!studentId && !studentPhone) {
+      setErrorMsg('Missing student profile phone. Please complete onboarding first.');
       return;
     }
 
     setIsCalling(true);
     setErrorMsg(null);
     try {
+      const recentTranscript = transcriptRef.current
+        .split('\n')
+        .filter((line) => line.trim())
+        .slice(-8)
+        .join('\n');
+
       const res = await fetch('http://localhost:8000/api/v1/calls/outbound', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_number: target }),
+        body: JSON.stringify({
+          student_id: studentId,
+          student_phone: studentPhone,
+          student_name: studentName,
+          context: recentTranscript,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
@@ -528,12 +537,6 @@ export default function Avatar({ studentId }: { studentId?: string }) {
             ))}
 
             <div className="pt-2 border-t border-slate-800 mt-2 space-y-2">
-              <input
-                value={callPhoneNumber}
-                onChange={(e) => setCallPhoneNumber(e.target.value)}
-                placeholder="+919999999999"
-                className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs px-3 py-2 rounded-xl focus:outline-none focus:border-blue-500"
-              />
               <button
                 onClick={handlePhoneCall}
                 disabled={isCalling}

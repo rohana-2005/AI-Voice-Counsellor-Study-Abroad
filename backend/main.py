@@ -6,6 +6,7 @@ import base64
 import hashlib
 import re
 import uuid
+from html import escape
 from pathlib import Path
 from datetime import datetime
 from urllib import request as urlrequest
@@ -327,7 +328,11 @@ class CallWebhookRequest(BaseModel):
 
 
 class OutboundCallRequest(BaseModel):
-    to_number: str = Field(min_length=8)
+    to_number: str | None = None
+    student_id: str | None = None
+    student_phone: str | None = None
+    context: str | None = None
+    student_name: str | None = None
 
 
 class RagQueryRequest(BaseModel):
@@ -422,10 +427,6 @@ def _sync_admin_on_login(userinfo: dict[str, str]) -> dict:
     if not email:
         raise HTTPException(status_code=400, detail="Google user info did not include email.")
 
-    auth_user_id = _get_or_create_auth_user_id(email=email, full_name=full_name)
-    if not auth_user_id:
-        raise HTTPException(status_code=502, detail="Failed to provision Supabase auth user for admin.")
-
     query = urlencode(
         {
             "select": "id,full_name,email",
@@ -453,6 +454,10 @@ def _sync_admin_on_login(userinfo: dict[str, str]) -> dict:
         raise HTTPException(status_code=502, detail=f"Supabase admins lookup failed: {detail}") from err
     except URLError as err:
         raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    auth_user_id = _get_or_create_auth_user_id(email=email, full_name=full_name)
+    if not auth_user_id:
+        raise HTTPException(status_code=502, detail="Failed to provision Supabase auth user for admin.")
 
     insert_payload = [
         {
@@ -542,6 +547,21 @@ def _get_or_create_auth_user_id(email: str, full_name: str) -> str | None:
             return str(user_id) if user_id else None
     except HTTPError as err:
         detail = err.read().decode("utf-8") if err.fp else str(err)
+        # If user already exists, re-query the users list and return that id.
+        lowered = detail.lower()
+        if "already" in lowered or "exists" in lowered or "registered" in lowered or err.code in {409, 422}:
+            try:
+                with urlrequest.urlopen(list_req, timeout=20) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                    if isinstance(payload, dict):
+                        users = payload.get("users") or []
+                        if users:
+                            user_id = users[0].get("id")
+                            if user_id:
+                                return str(user_id)
+            except Exception:
+                pass
+            return None
         raise HTTPException(status_code=502, detail=f"Supabase auth user create failed: {detail}") from err
     except URLError as err:
         raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
@@ -1135,6 +1155,375 @@ def _summarize_transcript_with_groq(transcript: str) -> str:
         return transcript[:700]
 
 
+TWILIO_CALL_STATE: dict[str, dict[str, Any]] = {}
+
+
+def _phone_digits(value: str) -> str:
+    return "".join(ch for ch in (value or "") if ch.isdigit())
+
+
+def _resolve_student_id_by_phone(phone_number: str) -> str | None:
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        return None
+
+    cleaned = phone_number.strip()
+    exact_candidates = [cleaned]
+    if cleaned.startswith("+"):
+        exact_candidates.append(cleaned[1:])
+
+    for candidate in exact_candidates:
+        if not candidate:
+            continue
+        query = urlencode({"select": "id", "phone_number": f"eq.{candidate}", "limit": "1"})
+        req = urlrequest.Request(
+            f"{supabase_url}/rest/v1/students?{query}",
+            headers={
+                "apikey": service_key,
+                "Authorization": f"Bearer {service_key}",
+                "Accept": "application/json",
+            },
+            method="GET",
+        )
+        try:
+            with urlrequest.urlopen(req, timeout=20) as response:
+                rows = json.loads(response.read().decode("utf-8"))
+                if isinstance(rows, list) and rows and rows[0].get("id"):
+                    return str(rows[0]["id"])
+        except Exception:
+            pass
+
+    # Fallback: compare on digits when stored format differs (+91 vs 91 etc.).
+    req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/students?{urlencode({'select': 'id,phone_number', 'limit': '1000'})}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+    try:
+        target_digits = _phone_digits(cleaned)
+        with urlrequest.urlopen(req, timeout=20) as response:
+            rows = json.loads(response.read().decode("utf-8"))
+            if isinstance(rows, list):
+                for row in rows:
+                    row_digits = _phone_digits(str(row.get("phone_number") or ""))
+                    if row_digits and row_digits == target_digits and row.get("id"):
+                        return str(row["id"])
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_student_phone_by_id(student_id: str) -> str | None:
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key or not student_id:
+        return None
+
+    query = urlencode({"select": "phone_number", "id": f"eq.{student_id}", "limit": "1"})
+    req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/students?{query}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=20) as response:
+            rows = json.loads(response.read().decode("utf-8"))
+            if isinstance(rows, list) and rows:
+                phone = str(rows[0].get("phone_number") or "").strip()
+                return phone or None
+    except Exception:
+        pass
+    return None
+
+
+def _analyze_transcript_for_call_session(transcript: str) -> dict[str, Any]:
+    lead_score = None
+    classification = None
+    sentiment = None
+    detailed_report = None
+    raw_ai_response = None
+    score_breakdown = None
+
+    groq_key = os.getenv("GROQ_API_KEY")
+    groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    score_keys = [
+        "financial_clarity",
+        "academic_readiness",
+        "program_familiarity",
+        "admission_commitment",
+        "institution_familiarity",
+    ]
+
+    if groq_key and transcript.strip():
+        system_prompt = """You are an expert student admission counselor evaluator.
+Analyze the provided transcript of an avatar session with a student.
+Output your analysis ONLY as a valid JSON object with the exact following keys:
+1. \"lead_score\": integer between 0 and 100. Set this equal to the average of the 5 score_breakdown values.
+2. \"classification\": One of [\"Hot\", \"Warm\", \"Cold\", \"Hard\", \"Soft\"]. Since we specifically want Hard and Soft leads, prioritize \"Hard\" (strong commitment/clear plan) or \"Soft\" (uncertain/exploring).
+3. \"sentiment\": A short string describing the student's emotional tone (e.g., \"Enthusiastic\", \"Anxious\", \"Curious\").
+4. \"score_breakdown\": A JSON object with EXACTLY these numeric keys, each from 0 to 100:
+   - \"financial_clarity\"
+   - \"academic_readiness\"
+   - \"program_familiarity\"
+   - \"admission_commitment\"
+   - \"institution_familiarity\"
+5. \"detailed_report\": A paragraph summarizing the student's needs, objections, and next steps.
+"""
+        try:
+            with httpx.Client(timeout=20) as client:
+                res = client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {groq_key}"},
+                    json={
+                        "model": groq_model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": transcript},
+                        ],
+                        "response_format": {"type": "json_object"},
+                    },
+                )
+            if res.status_code == 200:
+                data = res.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+                parsed = json.loads(content)
+                raw_breakdown = parsed.get("score_breakdown")
+                if isinstance(raw_breakdown, dict):
+                    normalized_breakdown: dict[str, int] = {}
+                    for key in score_keys:
+                        raw_value = raw_breakdown.get(key, 0)
+                        try:
+                            normalized_value = max(0, min(100, int(raw_value)))
+                        except (TypeError, ValueError):
+                            normalized_value = 0
+                        normalized_breakdown[key] = normalized_value
+                    score_breakdown = normalized_breakdown
+                    lead_score = round(sum(normalized_breakdown.values()) / len(score_keys))
+                else:
+                    score_breakdown = {key: 0 for key in score_keys}
+                    lead_score = 0
+
+                raw_classification = parsed.get("classification")
+                if isinstance(raw_classification, str):
+                    normalized = raw_classification.strip().title()
+                    if normalized in {"Hot", "Warm", "Cold", "Hard", "Soft"}:
+                        classification = normalized
+                sentiment = parsed.get("sentiment")
+                detailed_report = parsed.get("detailed_report")
+                raw_ai_response = parsed
+        except Exception:
+            pass
+
+    return {
+        "lead_score": lead_score,
+        "classification": classification,
+        "sentiment": sentiment,
+        "detailed_report": detailed_report,
+        "score_breakdown": score_breakdown,
+        "raw_ai_response": raw_ai_response,
+    }
+
+
+def _insert_call_session(transcript: str, student_id: str | None = None) -> dict[str, Any]:
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+
+    analysis = _analyze_transcript_for_call_session(transcript)
+    row = {
+        "transcript": transcript,
+        "lead_score": analysis.get("lead_score"),
+        "classification": analysis.get("classification"),
+        "sentiment": analysis.get("sentiment"),
+        "detailed_report": analysis.get("detailed_report"),
+        "score_breakdown": analysis.get("score_breakdown"),
+        "raw_ai_response": analysis.get("raw_ai_response"),
+        "student_id": student_id if student_id and student_id != "undefined" else None,
+    }
+
+    insert_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/call_sessions",
+        data=json.dumps([row]).encode("utf-8"),
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Prefer": "return=representation",
+        },
+        method="POST",
+    )
+
+    with urlrequest.urlopen(insert_req, timeout=20) as response:
+        rows = json.loads(response.read().decode("utf-8"))
+        return rows[0] if isinstance(rows, list) and rows else {}
+
+
+def _generate_call_opening_with_groq(context: str) -> str:
+    api_key = os.getenv("GROQ_API_KEY")
+    model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    if not api_key:
+        return "Hi, I am your StudyAbroad AI counselor. I am calling to guide your admissions journey."
+
+    body = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a warm study-abroad counselor speaking on a phone call. "
+                    "Write a short opening in 2 to 3 sentences and end with one clear question."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Conversation context:\n{context}",
+            },
+        ],
+        "temperature": 0.3,
+    }
+
+    try:
+        with httpx.Client(timeout=8) as client:
+            response = client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+            response.raise_for_status()
+            data = response.json()
+            choices = data.get("choices", [])
+            if not choices:
+                return "Hi, I am your StudyAbroad AI counselor. Could you share your top preferred country?"
+            content = choices[0].get("message", {}).get("content", "")
+            return content.strip() or "Hi, I am your StudyAbroad AI counselor. Could you share your top preferred country?"
+    except Exception:
+        return "Hi, I am your StudyAbroad AI counselor. Could you share your top preferred country?"
+
+
+def _generate_next_call_turn_with_groq(context: str, transcript: str) -> str:
+    api_key = os.getenv("GROQ_API_KEY")
+    model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    if not api_key:
+        return "Thanks. What is your target country and intake?"
+
+    body = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a study abroad counselor on a phone call. "
+                    "Ask exactly one concise next question based on the conversation. "
+                    "Keep response under 35 words. "
+                    "If enough details are collected, respond with [[END]] at the end."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Counselor context:\n{context}\n\nCall transcript so far:\n{transcript}",
+            },
+        ],
+        "temperature": 0.3,
+    }
+
+    try:
+        with httpx.Client(timeout=7) as client:
+            response = client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={**body, "max_tokens": 80},
+            )
+            response.raise_for_status()
+            data = response.json()
+            choices = data.get("choices", [])
+            if not choices:
+                return "Thanks. What budget range do you have in mind?"
+            content = choices[0].get("message", {}).get("content", "")
+            return content.strip() or "Thanks. What budget range do you have in mind?"
+    except Exception:
+        return "Thanks. What budget range do you have in mind?"
+
+
+def _extract_student_phone_from_call(from_number: str, to_number: str) -> str:
+    twilio_number = (os.getenv("TWILIO_PHONE_NUMBER") or "").strip()
+    if twilio_number and to_number.strip() == twilio_number:
+        return from_number.strip()
+    if twilio_number and from_number.strip() == twilio_number:
+        return to_number.strip()
+    return to_number.strip() or from_number.strip()
+
+
+def _is_public_webhook_base(url: str) -> bool:
+    if not url:
+        return False
+    normalized = url.strip().lower()
+    if not (normalized.startswith("https://") or normalized.startswith("http://")):
+        return False
+    blocked_hosts = ["localhost", "127.0.0.1", "0.0.0.0", "::1"]
+    return not any(host in normalized for host in blocked_hosts)
+
+
+def _build_call_gather_twiml(message: str, action_url: str, end_call: bool = False) -> str:
+    safe_message = escape(message)
+    if end_call:
+        return (
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            "<Response>"
+            f"<Say voice=\"alice\">{safe_message}</Say>"
+            "<Hangup/>"
+            "</Response>"
+        )
+
+    return (
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<Response>"
+        f"<Gather input=\"speech\" actionOnEmptyResult=\"true\" timeout=\"6\" speechTimeout=\"auto\" action=\"{escape(action_url)}\" method=\"POST\">"
+        f"<Say voice=\"alice\">{safe_message}</Say>"
+        "</Gather>"
+        f"<Redirect method=\"POST\">{escape(action_url)}</Redirect>"
+        "</Response>"
+    )
+
+
+def _finalize_twilio_call_session(call_sid: str, fallback_phone: str = "") -> None:
+    state = TWILIO_CALL_STATE.get(call_sid)
+    if not state:
+        return
+    transcript_lines = state.get("history", [])
+    transcript = "\n".join(line for line in transcript_lines if isinstance(line, str)).strip()
+    if not transcript:
+        TWILIO_CALL_STATE.pop(call_sid, None)
+        return
+
+    student_id = state.get("student_id")
+    if not student_id and fallback_phone:
+        student_id = _resolve_student_id_by_phone(fallback_phone)
+
+    try:
+        _insert_call_session(transcript=transcript, student_id=student_id)
+    except Exception:
+        pass
+    finally:
+        TWILIO_CALL_STATE.pop(call_sid, None)
+
+
 @app.post("/api/v1/calls/outbound", tags=["voice"])
 def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
     _load_local_env()
@@ -1148,7 +1537,32 @@ def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
             detail="Missing Twilio credentials (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER).",
         )
 
-    twiml_url = os.getenv("TWILIO_OUTBOUND_TWIML_URL", "http://demo.twilio.com/docs/voice.xml")
+    target_number = (payload.to_number or "").strip()
+    if not target_number and payload.student_phone:
+        target_number = payload.student_phone.strip()
+    if not target_number and payload.student_id:
+        target_number = _resolve_student_phone_by_id(payload.student_id) or ""
+    if not target_number:
+        raise HTTPException(status_code=400, detail="Unable to determine student phone number for call.")
+
+    base_context = os.getenv("ANAM_SYSTEM_PROMPT", "You are a study abroad counselor")
+    student_label = f"Student name: {payload.student_name}." if payload.student_name else ""
+    call_context = (payload.context or "").strip()
+    full_context = " ".join(part for part in [base_context, student_label, call_context] if part).strip()
+    opening_script = _generate_call_opening_with_groq(full_context)
+    webhook_base = (os.getenv("TWILIO_WEBHOOK_BASE_URL") or "").strip().rstrip("/")
+    voice_turn_url = f"{webhook_base}/api/v1/webhook/voice-turn" if _is_public_webhook_base(webhook_base) else ""
+    if not voice_turn_url:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Interactive call flow is disabled. Set TWILIO_WEBHOOK_BASE_URL to a public HTTPS URL "
+                "(for example an ngrok URL) so Twilio can post speech responses to /api/v1/webhook/voice-turn."
+            ),
+        )
+
+    twiml = _build_call_gather_twiml(opening_script, voice_turn_url, end_call=False)
+    student_id = payload.student_id or _resolve_student_id_by_phone(target_number)
 
     try:
         with httpx.Client(timeout=20) as client:
@@ -1156,9 +1570,9 @@ def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
                 f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json",
                 auth=(account_sid, auth_token),
                 data={
-                    "To": payload.to_number,
+                    "To": target_number,
                     "From": from_number,
-                    "Url": twiml_url,
+                    "Twiml": twiml,
                 },
             )
 
@@ -1172,6 +1586,15 @@ def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
         call_sid = data.get("sid")
         if not call_sid:
             raise HTTPException(status_code=500, detail="Twilio call created but SID missing in response.")
+
+        TWILIO_CALL_STATE[str(call_sid)] = {
+            "history": [f"[AI]: {opening_script}"],
+            "context": full_context,
+            "turns": 0,
+            "no_input_count": 0,
+            "student_id": student_id,
+            "phone": target_number,
+        }
         return {"message": "Outbound call initiated", "call_sid": str(call_sid)}
     except HTTPException:
         raise
@@ -1179,15 +1602,105 @@ def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
         raise HTTPException(status_code=500, detail=f"Failed to initiate outbound call: {exc}") from exc
 
 @app.post("/api/v1/webhook/incoming-call")
-def handle_incoming_call():
-    twiml = (
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-        "<Response>"
-        "<Say>Thank you for calling. Please leave your message after the beep.</Say>"
-        "<Record transcribe=\"true\" transcribeCallback=\"/api/v1/webhook/transcription\" maxLength=\"300\" playBeep=\"true\"/>"
-        "</Response>"
-    )
-    return Response(content=twiml, media_type="text/xml")
+def handle_incoming_call(
+    CallSid: str = Form(...),
+    From: str = Form(default=""),
+    To: str = Form(default=""),
+):
+    webhook_base = (os.getenv("TWILIO_WEBHOOK_BASE_URL") or "").strip().rstrip("/")
+    voice_turn_url = f"{webhook_base}/api/v1/webhook/voice-turn" if webhook_base else ""
+    if not voice_turn_url:
+        return Response(content="<Response><Say>Server is not configured for call flow.</Say><Hangup/></Response>", media_type="text/xml")
+
+    base_context = os.getenv("ANAM_SYSTEM_PROMPT", "You are a study abroad counselor")
+    opening_script = _generate_call_opening_with_groq(base_context)
+    caller_phone = _extract_student_phone_from_call(From, To)
+    TWILIO_CALL_STATE[CallSid] = {
+        "history": [f"[AI]: {opening_script}"],
+        "context": base_context,
+        "turns": 0,
+        "no_input_count": 0,
+        "student_id": _resolve_student_id_by_phone(caller_phone),
+        "phone": caller_phone,
+    }
+
+    return Response(content=_build_call_gather_twiml(opening_script, voice_turn_url, end_call=False), media_type="text/xml")
+
+
+@app.post("/api/v1/webhook/voice-turn", tags=["voice"])
+def handle_voice_turn(
+    CallSid: str = Form(...),
+    SpeechResult: str = Form(default=""),
+    From: str = Form(default=""),
+    To: str = Form(default=""),
+):
+    webhook_base = (os.getenv("TWILIO_WEBHOOK_BASE_URL") or "").strip().rstrip("/")
+    voice_turn_url = f"{webhook_base}/api/v1/webhook/voice-turn" if webhook_base else ""
+    if not voice_turn_url:
+        return Response(content="<Response><Say>Server is not configured for call flow.</Say><Hangup/></Response>", media_type="text/xml")
+    try:
+        state = TWILIO_CALL_STATE.get(CallSid)
+        if not state:
+            base_context = os.getenv("ANAM_SYSTEM_PROMPT", "You are a study abroad counselor")
+            caller_phone = _extract_student_phone_from_call(From, To)
+            state = {
+                "history": [],
+                "context": base_context,
+                "turns": 0,
+                "no_input_count": 0,
+                "student_id": _resolve_student_id_by_phone(caller_phone),
+                "phone": caller_phone,
+            }
+            TWILIO_CALL_STATE[CallSid] = state
+
+        user_text = (SpeechResult or "").strip()
+        if not user_text:
+            no_input_count = int(state.get("no_input_count", 0)) + 1
+            state["no_input_count"] = no_input_count
+            if no_input_count >= 3:
+                closing = "I could not hear a response, so I will end this call now. We can continue later."
+                state.setdefault("history", []).append(f"[AI]: {closing}")
+                fallback_phone = _extract_student_phone_from_call(From, To)
+                _finalize_twilio_call_session(CallSid, fallback_phone=fallback_phone)
+                return Response(content=_build_call_gather_twiml(closing, voice_turn_url, end_call=True), media_type="text/xml")
+
+            reprompt = "I did not catch that. Please say your answer after the beep."
+            state.setdefault("history", []).append(f"[AI]: {reprompt}")
+            return Response(content=_build_call_gather_twiml(reprompt, voice_turn_url, end_call=False), media_type="text/xml")
+
+        state["no_input_count"] = 0
+        state.setdefault("history", []).append(f"[USER]: {user_text}")
+        lowered = user_text.lower()
+        if any(word in lowered for word in ["bye", "goodbye", "stop", "end call", "thank you"]):
+            closing = "Thanks for your time. I will save this session and our team will follow up with next steps."
+            state.setdefault("history", []).append(f"[AI]: {closing}")
+            fallback_phone = _extract_student_phone_from_call(From, To)
+            _finalize_twilio_call_session(CallSid, fallback_phone=fallback_phone)
+            return Response(content=_build_call_gather_twiml(closing, voice_turn_url, end_call=True), media_type="text/xml")
+
+        turns = int(state.get("turns", 0)) + 1
+        state["turns"] = turns
+
+        transcript_so_far = "\n".join(state.get("history", []))
+        next_reply = _generate_next_call_turn_with_groq(str(state.get("context", "")), transcript_so_far)
+        model_requested_end = "[[END]]" in next_reply
+        max_turns = int(os.getenv("TWILIO_MAX_TURNS", "12"))
+        should_end = (model_requested_end and turns >= 3) or turns >= max_turns
+        next_reply = next_reply.replace("[[END]]", "").strip() or "Thank you for sharing."
+        state.setdefault("history", []).append(f"[AI]: {next_reply}")
+
+        if should_end:
+            final_message = f"{next_reply} Thank you. I have recorded this session and we will share next steps shortly."
+            state.setdefault("history", []).append(f"[AI]: {final_message}")
+            fallback_phone = _extract_student_phone_from_call(From, To)
+            _finalize_twilio_call_session(CallSid, fallback_phone=fallback_phone)
+            return Response(content=_build_call_gather_twiml(final_message, voice_turn_url, end_call=True), media_type="text/xml")
+
+        return Response(content=_build_call_gather_twiml(next_reply, voice_turn_url, end_call=False), media_type="text/xml")
+    except Exception:
+        # Always return valid TwiML so Twilio does not announce an application error.
+        safe_reprompt = "I hit a temporary issue. Please repeat your answer."
+        return Response(content=_build_call_gather_twiml(safe_reprompt, voice_turn_url, end_call=False), media_type="text/xml")
 
 @app.post("/api/v1/webhook/transcription")
 def handle_call_transcription(
@@ -1222,10 +1735,20 @@ def handle_call_transcription(
             # Keep webhook healthy even if messaging fails.
             pass
 
+    student_phone = _extract_student_phone_from_call(Caller, Called)
+    student_id = _resolve_student_id_by_phone(student_phone)
+    inserted_session_id = None
+    try:
+        inserted = _insert_call_session(transcript=TranscriptionText, student_id=student_id)
+        inserted_session_id = inserted.get("id") if isinstance(inserted, dict) else None
+    except Exception:
+        pass
+
     return {
         "status": "ok",
         "call_sid": CallSid,
         "summary": summary,
+        "session_id": inserted_session_id,
     }
 
 @app.post("/api/v1/webhook/whatsapp-incoming")
@@ -1771,127 +2294,12 @@ class SaveSessionRequest(BaseModel):
 
 @app.post("/save-session")
 async def save_session(request: SaveSessionRequest):
-    groq_key = os.getenv("GROQ_API_KEY")
-    groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-    supabase_url = os.getenv("SUPABASE_URL")
-    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
-
-    if not supabase_url or not service_key:
-        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
-    
-    lead_score = None
-    classification = None
-    sentiment = None
-    detailed_report = None
-    raw_ai_response = None
-    score_breakdown = None
-
-    score_keys = [
-        "financial_clarity",
-        "academic_readiness",
-        "program_familiarity",
-        "admission_commitment",
-        "institution_familiarity",
-    ]
-
-    if groq_key and request.transcript.strip():
-        system_prompt = """You are an expert student admission counselor evaluator. 
-Analyze the provided transcript of an avatar session with a student.
-Output your analysis ONLY as a valid JSON object with the exact following keys:
-1. "lead_score": integer between 0 and 100. Set this equal to the average of the 5 score_breakdown values.
-2. "classification": One of ["Hot", "Warm", "Cold", "Hard", "Soft"]. Since we specifically want Hard and Soft leads, prioritize "Hard" (strong commitment/clear plan) or "Soft" (uncertain/exploring).
-3. "sentiment": A short string describing the student's emotional tone (e.g., "Enthusiastic", "Anxious", "Curious").
-4. "score_breakdown": A JSON object with EXACTLY these numeric keys, each from 0 to 100:
-   - "financial_clarity"
-   - "academic_readiness"
-   - "program_familiarity"
-   - "admission_commitment"
-   - "institution_familiarity"
-5. "detailed_report": A paragraph summarizing the student's needs, objections, and next steps.
-"""
-        
-        try:
-            async with httpx.AsyncClient() as client:
-                res = await client.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer " + groq_key},
-                    json={
-                        "model": groq_model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": request.transcript}
-                        ],
-                        "response_format": {"type": "json_object"}
-                    },
-                    timeout=15.0
-                )
-                if res.status_code == 200:
-                    data = res.json()
-                    content = data["choices"][0]["message"]["content"]
-                    try:
-                        parsed = json.loads(content)
-                        raw_breakdown = parsed.get("score_breakdown")
-                        if isinstance(raw_breakdown, dict):
-                            normalized_breakdown: dict[str, int] = {}
-                            for key in score_keys:
-                                raw_value = raw_breakdown.get(key, 0)
-                                try:
-                                    normalized_value = max(0, min(100, int(raw_value)))
-                                except (TypeError, ValueError):
-                                    normalized_value = 0
-                                normalized_breakdown[key] = normalized_value
-
-                            score_breakdown = normalized_breakdown
-                            lead_score = round(sum(normalized_breakdown.values()) / len(score_keys))
-                        else:
-                            score_breakdown = {key: 0 for key in score_keys}
-                            lead_score = 0
-
-                        raw_classification = parsed.get("classification")
-                        if isinstance(raw_classification, str):
-                            normalized = raw_classification.strip().title()
-                            if normalized in {"Hot", "Warm", "Cold", "Hard", "Soft"}:
-                                classification = normalized
-
-                        sentiment = parsed.get("sentiment")
-                        detailed_report = parsed.get("detailed_report")
-                        raw_ai_response = parsed
-                    except Exception:
-                        print("Failed to parse Groq JSON output")
-                else:
-                    print(f"Groq API Error: {res.status_code} {res.text}")
-        except Exception as e:
-            print(f"Failed to process transcript with Groq: {e}")
-
-    row = {
-        "transcript": request.transcript,
-        "lead_score": lead_score,
-        "classification": classification,
-        "sentiment": sentiment,
-        "detailed_report": detailed_report,
-        "score_breakdown": score_breakdown,
-        "raw_ai_response": raw_ai_response,
-        "student_id": request.student_id if request.student_id and request.student_id != 'undefined' else None
-    }
-
-    insert_req = urlrequest.Request(
-        f"{supabase_url}/rest/v1/call_sessions",
-        data=json.dumps([row]).encode("utf-8"),
-        headers={
-            "apikey": service_key,
-            "Authorization": f"Bearer {service_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Prefer": "return=representation",
-        },
-        method="POST",
-    )
-
     try:
-        with urlrequest.urlopen(insert_req, timeout=20) as response:
-            rows = json.loads(response.read().decode("utf-8"))
-            inserted = rows[0] if isinstance(rows, list) and rows else {}
-            return {"status": "success", "inserted": inserted}
+        inserted = _insert_call_session(
+            transcript=request.transcript,
+            student_id=request.student_id if request.student_id and request.student_id != "undefined" else None,
+        )
+        return {"status": "success", "inserted": inserted}
     except HTTPError as err:
         detail = err.read().decode("utf-8") if err.fp else str(err)
         raise HTTPException(status_code=502, detail=f"Failed to insert call session: {detail}") from err

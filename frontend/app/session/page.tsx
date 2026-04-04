@@ -15,7 +15,42 @@ import { useAuthSession } from '@/components/auth/AuthSessionProvider';
  */
 export default function SessionPage() {
   const [isAvatarEnabled, setIsAvatarEnabled] = useState(false);
+  const [isCalling, setIsCalling] = useState(false);
+  const [callMsg, setCallMsg] = useState<string | null>(null);
   const { profile } = useAuthSession();
+  const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+
+  const handleConnectViaCall = async () => {
+    if (!profile?.student_id && !profile?.phone_number) {
+      setCallMsg('Complete onboarding phone number first, then retry.');
+      return;
+    }
+
+    setIsCalling(true);
+    setCallMsg(null);
+    try {
+      const res = await fetch(`${backendBaseUrl}/api/v1/calls/outbound`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: profile?.student_id || undefined,
+          student_phone: profile?.phone_number || undefined,
+          student_name: profile?.full_name || undefined,
+          context: 'User initiated counseling call from session page before enabling avatar.',
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { detail?: string; call_sid?: string };
+      if (!res.ok) {
+        throw new Error(data.detail || `HTTP ${res.status}`);
+      }
+      setCallMsg(data.call_sid ? `Call started (SID: ${data.call_sid})` : 'Call started.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setCallMsg(`Call failed: ${message}`);
+    } finally {
+      setIsCalling(false);
+    }
+  };
 
   if (!isAvatarEnabled) {
     return (
@@ -59,10 +94,38 @@ export default function SessionPage() {
           >
             Enable Avatar
           </button>
+          <button
+            onClick={handleConnectViaCall}
+            disabled={isCalling}
+            style={{
+              marginTop: '10px',
+              background: '#1f2937',
+              color: '#ffffff',
+              border: '1px solid #334155',
+              borderRadius: '12px',
+              padding: '12px 18px',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: isCalling ? 'not-allowed' : 'pointer',
+              width: '100%',
+              opacity: isCalling ? 0.7 : 1,
+            }}
+          >
+            {isCalling ? 'Calling...' : 'Connect Via Call (No Avatar)'}
+          </button>
+          {callMsg ? (
+            <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>{callMsg}</p>
+          ) : null}
         </div>
       </div>
     );
   }
 
-  return <Avatar studentId={profile?.student_id || undefined} />;
+  return (
+    <Avatar
+      studentId={profile?.student_id || undefined}
+      studentPhone={profile?.phone_number || undefined}
+      studentName={profile?.full_name || undefined}
+    />
+  );
 }
