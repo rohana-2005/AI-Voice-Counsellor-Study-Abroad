@@ -1,9 +1,9 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { GraduationCap } from 'lucide-react';
-import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 
 const navLinks = [
   { label: 'Home',         href: '/' },
@@ -14,18 +14,20 @@ const navLinks = [
 
 export default function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const { isAuthenticated } = useAuthSession();
+  const [signInError, setSignInError] = useState('');
 
-  const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+  const backendBaseUrl =
+    process.env.NEXT_PUBLIC_BACKEND_URL ??
+    process.env.NEXT_PUBLIC_PY_BACKEND_URL ??
+    'http://localhost:8000';
 
   const handleSignIn = async () => {
     if (isSigningIn) {
       return;
     }
 
+    setSignInError('');
     setIsSigningIn(true);
     try {
       const res = await fetch(
@@ -34,18 +36,22 @@ export default function Navbar() {
       );
 
       if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        setSignInError(detail || 'Sign-in failed. Backend is unreachable or returned an error.');
         setIsSigningIn(false);
         return;
       }
 
       const data = (await res.json()) as { url?: string };
       if (!data.url) {
+        setSignInError('Sign-in URL was not returned by backend.');
         setIsSigningIn(false);
         return;
       }
 
       window.location.href = data.url;
     } catch {
+      setSignInError('Cannot reach backend at http://localhost:8000. Start backend and try again.');
       setIsSigningIn(false);
     }
   };
@@ -55,6 +61,7 @@ export default function Navbar() {
       return;
     }
 
+    setSignInError('');
     setIsSigningIn(true);
     try {
       const res = await fetch(
@@ -63,18 +70,22 @@ export default function Navbar() {
       );
 
       if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        setSignInError(detail || 'Admin sign-in failed. Backend is unreachable or returned an error.');
         setIsSigningIn(false);
         return;
       }
 
       const data = (await res.json()) as { url?: string };
       if (!data.url) {
+        setSignInError('Admin sign-in URL was not returned by backend.');
         setIsSigningIn(false);
         return;
       }
 
       window.location.href = data.url;
     } catch {
+      setSignInError('Cannot reach backend at http://localhost:8000. Start backend and try again.');
       setIsSigningIn(false);
     }
   };
@@ -183,6 +194,22 @@ export default function Navbar() {
             </Link>
           </div>
         </div>
+        {signInError ? (
+          <div
+            style={{
+              color: '#b91c1c',
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: '10px',
+              padding: '8px 12px',
+              marginBottom: '12px',
+              fontSize: '13px',
+              fontWeight: 500,
+            }}
+          >
+            {signInError}
+          </div>
+        ) : null}
       </div>
     </motion.nav>
   );

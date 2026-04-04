@@ -31,7 +31,10 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+  const backendBaseUrl =
+    process.env.NEXT_PUBLIC_BACKEND_URL ??
+    process.env.NEXT_PUBLIC_PY_BACKEND_URL ??
+    'http://localhost:8000';
 
   const refreshProfile = useCallback(async () => {
     const token = window.localStorage.getItem(ACCESS_TOKEN_KEY) || '';
@@ -40,18 +43,23 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
       return;
     }
 
-    const res = await fetch(
-      `${backendBaseUrl}/api/v1/auth/google/profile?access_token=${encodeURIComponent(token)}`,
-      { credentials: 'include' }
-    );
+    try {
+      const res = await fetch(
+        `${backendBaseUrl}/api/v1/auth/google/profile?access_token=${encodeURIComponent(token)}`,
+        { credentials: 'include' }
+      );
 
-    if (!res.ok) {
+      if (!res.ok) {
+        return;
+      }
+
+      const profileData = (await res.json()) as AuthProfile;
+      setProfile(profileData);
+      window.localStorage.setItem(PROFILE_KEY, JSON.stringify(profileData));
+    } catch {
+      // Backend may be temporarily unavailable during local dev; keep app usable.
       return;
     }
-
-    const profileData = (await res.json()) as AuthProfile;
-    setProfile(profileData);
-    window.localStorage.setItem(PROFILE_KEY, JSON.stringify(profileData));
   }, [backendBaseUrl]);
 
   useEffect(() => {
