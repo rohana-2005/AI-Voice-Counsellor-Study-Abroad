@@ -11,13 +11,21 @@ CREATE TABLE public.academic_profiles (
   target_countries ARRAY,
   course_interest text,
   intake_timing text,
-  test_status text,
+  test_status jsonb,
   budget_range text,
   scholarship_interest boolean DEFAULT false,
   application_timeline date,
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT academic_profiles_pkey PRIMARY KEY (id),
   CONSTRAINT academic_profiles_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
+);
+CREATE TABLE public.admins (
+  id uuid NOT NULL,
+  full_name text NOT NULL,
+  email text NOT NULL UNIQUE,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT admins_pkey PRIMARY KEY (id),
+  CONSTRAINT admins_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.call_sessions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -42,6 +50,19 @@ CREATE TABLE public.knowledge_base (
   metadata jsonb,
   CONSTRAINT knowledge_base_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.meetings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid,
+  admin_id uuid,
+  scheduled_at timestamp with time zone NOT NULL,
+  meeting_link text,
+  notes text,
+  status USER-DEFINED DEFAULT 'scheduled'::meeting_status,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT meetings_pkey PRIMARY KEY (id),
+  CONSTRAINT meetings_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT meetings_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public.admins(id)
+);
 CREATE TABLE public.students (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   full_name text,
@@ -51,4 +72,16 @@ CREATE TABLE public.students (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT students_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.universities (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  country text NOT NULL,
+  description text,
+  admission_requirements text,
+  average_cost_usd numeric,
+  scholarships_available boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT universities_pkey PRIMARY KEY (id)
 );
