@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Video } from 'lucide-react';
 import { useAuthSession } from '@/components/auth/AuthSessionProvider';
@@ -25,52 +25,72 @@ export default function AdminCalendarCard() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
 
-  const loadEvents = useCallback(async () => {
-    if (!accessToken) {
-      setEvents([]);
-      return;
-    }
+  useEffect(() => {
+    let cancelled = false;
 
-    setStatus('loading');
-    try {
-      const url = `${backendBaseUrl}/api/v1/calendar/events?access_token=${encodeURIComponent(accessToken)}`;
-      const res = await fetch(url, { credentials: 'include' });
-      const data = await res.json();
-      if (!res.ok || !Array.isArray(data.events)) {
-        setStatus('error');
-        setEvents([]);
+    const loadEvents = async () => {
+      if (!accessToken) {
+        if (!cancelled) {
+          setEvents([]);
+        }
         return;
       }
 
-      const mapped: CalendarEvent[] = data.events.map(
-        (item: { id?: string; summary?: string; start?: string; htmlLink?: string }, index: number) => {
-          const start = item.start ? new Date(item.start) : new Date();
-          const isValid = !Number.isNaN(start.getTime());
-          return {
-            id: item.id || `evt-${index}`,
-            summary: item.summary || 'Untitled Meeting',
-            dateLabel: isValid
-              ? start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-              : 'TBD',
-            timeLabel: isValid
-              ? start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-              : 'TBD',
-            link: item.htmlLink,
-          };
+      if (!cancelled) {
+        setStatus('loading');
+      }
+      try {
+        const url = `${backendBaseUrl}/api/v1/calendar/events`;
+        const res = await fetch(url, {
+          credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data.events)) {
+          if (!cancelled) {
+            setStatus('error');
+            setEvents([]);
+          }
+          return;
         }
-      );
 
-      setEvents(mapped);
-      setStatus('idle');
-    } catch {
-      setStatus('error');
-      setEvents([]);
-    }
-  }, [accessToken, backendBaseUrl]);
+        const mapped: CalendarEvent[] = data.events.map(
+          (item: { id?: string; summary?: string; start?: string; htmlLink?: string }, index: number) => {
+            const start = item.start ? new Date(item.start) : new Date();
+            const isValid = !Number.isNaN(start.getTime());
+            return {
+              id: item.id || `evt-${index}`,
+              summary: item.summary || 'Untitled Meeting',
+              dateLabel: isValid
+                ? start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                : 'TBD',
+              timeLabel: isValid
+                ? start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                : 'TBD',
+              link: item.htmlLink,
+            };
+          }
+        );
 
-  useEffect(() => {
+        if (!cancelled) {
+          setEvents(mapped);
+          setStatus('idle');
+        }
+      } catch {
+        if (!cancelled) {
+          setStatus('error');
+          setEvents([]);
+        }
+      }
+    };
+
     void loadEvents();
-  }, [loadEvents]);
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, backendBaseUrl]);
 
   return (
     <motion.div
