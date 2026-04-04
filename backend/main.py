@@ -11,7 +11,7 @@ from datetime import datetime
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -1575,6 +1575,77 @@ def get_priority_queue(access_token: str = Query(...)) -> dict[str, list[dict]]:
     return {"students": results}
 
 
+@app.get("/api/v1/admin/students/{student_id}/reports", tags=["admin"])
+def get_student_reports(student_id: str, access_token: str = Query(...)) -> dict[str, Any]:
+    _require_admin(access_token)
+
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+
+    student_query = urlencode(
+        {
+            "select": "id,full_name,email,phone_number",
+            "id": f"eq.{student_id}",
+            "limit": "1",
+        }
+    )
+    student_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/students?{student_query}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(student_req, timeout=20) as response:
+            rows = json.loads(response.read().decode("utf-8"))
+            student = rows[0] if isinstance(rows, list) and rows else None
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase students fetch failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    sessions_query = urlencode(
+        {
+            "select": "id,student_id,transcript,sentiment,lead_score,classification,score_breakdown,recommended_actions,raw_ai_response,created_at,detailed_report",
+            "student_id": f"eq.{student_id}",
+            "order": "created_at.desc",
+            "limit": "200",
+        }
+    )
+    sessions_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/call_sessions?{sessions_query}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlrequest.urlopen(sessions_req, timeout=20) as response:
+            sessions = json.loads(response.read().decode("utf-8"))
+            if not isinstance(sessions, list):
+                sessions = []
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Supabase call sessions fetch failed: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+    return {"student": student, "reports": sessions}
+
+
 @app.get("/api/v1/dashboard/metrics", tags=["dashboard"])
 def dashboard_metrics() -> dict[str, int]:
     # TODO: aggregate metrics from Supabase for analytics charts.
@@ -1692,3 +1763,137 @@ async def create_anam_session(request: Request) -> SessionTokenResponse:
         )
 
     return SessionTokenResponse(session_token=session_token)
+
+
+class SaveSessionRequest(BaseModel):
+    transcript: str
+    student_id: Optional[str] = None
+
+@app.post("/save-session")
+async def save_session(request: SaveSessionRequest):
+    groq_key = os.getenv("GROQ_API_KEY")
+    groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+    
+    lead_score = None
+    classification = None
+    sentiment = None
+    detailed_report = None
+    raw_ai_response = None
+    score_breakdown = None
+
+    score_keys = [
+        "financial_clarity",
+        "academic_readiness",
+        "program_familiarity",
+        "admission_commitment",
+        "institution_familiarity",
+    ]
+
+    if groq_key and request.transcript.strip():
+        system_prompt = """You are an expert student admission counselor evaluator. 
+Analyze the provided transcript of an avatar session with a student.
+Output your analysis ONLY as a valid JSON object with the exact following keys:
+1. "lead_score": integer between 0 and 100. Set this equal to the average of the 5 score_breakdown values.
+2. "classification": One of ["Hot", "Warm", "Cold", "Hard", "Soft"]. Since we specifically want Hard and Soft leads, prioritize "Hard" (strong commitment/clear plan) or "Soft" (uncertain/exploring).
+3. "sentiment": A short string describing the student's emotional tone (e.g., "Enthusiastic", "Anxious", "Curious").
+4. "score_breakdown": A JSON object with EXACTLY these numeric keys, each from 0 to 100:
+   - "financial_clarity"
+   - "academic_readiness"
+   - "program_familiarity"
+   - "admission_commitment"
+   - "institution_familiarity"
+5. "detailed_report": A paragraph summarizing the student's needs, objections, and next steps.
+"""
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer " + groq_key},
+                    json={
+                        "model": groq_model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": request.transcript}
+                        ],
+                        "response_format": {"type": "json_object"}
+                    },
+                    timeout=15.0
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    content = data["choices"][0]["message"]["content"]
+                    try:
+                        parsed = json.loads(content)
+                        raw_breakdown = parsed.get("score_breakdown")
+                        if isinstance(raw_breakdown, dict):
+                            normalized_breakdown: dict[str, int] = {}
+                            for key in score_keys:
+                                raw_value = raw_breakdown.get(key, 0)
+                                try:
+                                    normalized_value = max(0, min(100, int(raw_value)))
+                                except (TypeError, ValueError):
+                                    normalized_value = 0
+                                normalized_breakdown[key] = normalized_value
+
+                            score_breakdown = normalized_breakdown
+                            lead_score = round(sum(normalized_breakdown.values()) / len(score_keys))
+                        else:
+                            score_breakdown = {key: 0 for key in score_keys}
+                            lead_score = 0
+
+                        raw_classification = parsed.get("classification")
+                        if isinstance(raw_classification, str):
+                            normalized = raw_classification.strip().title()
+                            if normalized in {"Hot", "Warm", "Cold", "Hard", "Soft"}:
+                                classification = normalized
+
+                        sentiment = parsed.get("sentiment")
+                        detailed_report = parsed.get("detailed_report")
+                        raw_ai_response = parsed
+                    except Exception:
+                        print("Failed to parse Groq JSON output")
+                else:
+                    print(f"Groq API Error: {res.status_code} {res.text}")
+        except Exception as e:
+            print(f"Failed to process transcript with Groq: {e}")
+
+    row = {
+        "transcript": request.transcript,
+        "lead_score": lead_score,
+        "classification": classification,
+        "sentiment": sentiment,
+        "detailed_report": detailed_report,
+        "score_breakdown": score_breakdown,
+        "raw_ai_response": raw_ai_response,
+        "student_id": request.student_id if request.student_id and request.student_id != 'undefined' else None
+    }
+
+    insert_req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/call_sessions",
+        data=json.dumps([row]).encode("utf-8"),
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Prefer": "return=representation",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlrequest.urlopen(insert_req, timeout=20) as response:
+            rows = json.loads(response.read().decode("utf-8"))
+            inserted = rows[0] if isinstance(rows, list) and rows else {}
+            return {"status": "success", "inserted": inserted}
+    except HTTPError as err:
+        detail = err.read().decode("utf-8") if err.fp else str(err)
+        raise HTTPException(status_code=502, detail=f"Failed to insert call session: {detail}") from err
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
