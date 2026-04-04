@@ -1,0 +1,100 @@
+'use client';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { GraduationCap, Menu, X } from 'lucide-react';
+import { useState } from 'react';
+
+const navLinks = [
+  { label: 'Home',         href: '/' },
+  { label: 'How it works', href: '/#how-it-works' },
+  { label: 'Countries',    href: '/#countries' },
+  { label: 'Testimonials', href: '/#testimonials' },
+];
+
+export default function Navbar() {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  // Hide on app pages
+  if (pathname?.startsWith('/dashboard') || pathname?.startsWith('/session') || pathname?.startsWith('/report')) {
+    return null;
+  }
+
+  return (
+    <motion.nav
+      initial={{ y: -24, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+        background: 'rgba(255,255,255,0.97)',
+        backdropFilter: 'blur(12px)',
+        borderBottom: '1px solid #f1f5f9',
+      }}
+    >
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '64px' }}>
+          {/* Logo */}
+          <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: '10px',
+              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <GraduationCap size={19} color="#ffffff" />
+            </div>
+            <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '16px' }}>
+              StudyAbroad<span style={{ color: '#2563eb' }}>.AI</span>
+            </span>
+          </Link>
+
+          {/* Desktop nav */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+            {navLinks.map(l => (
+              <Link
+                key={l.href}
+                href={l.href}
+                style={{
+                  textDecoration: 'none',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  color: '#475569',
+                  transition: 'color 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#2563eb')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+              >
+                {l.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* CTAs */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Link href="/dashboard" style={{ textDecoration: 'none' }}>
+              <button style={{
+                fontSize: '14px', fontWeight: 500, color: '#334155',
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '8px 14px', borderRadius: '10px',
+              }}>
+                Sign In
+              </button>
+            </Link>
+            <Link href="/onboarding" style={{ textDecoration: 'none' }}>
+              <button style={{
+                fontSize: '14px', fontWeight: 600, color: '#ffffff',
+                background: '#2563eb', border: 'none', cursor: 'pointer',
+                padding: '10px 20px', borderRadius: '12px',
+                boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
+                transition: 'background 0.15s',
+              }}>
+                Free Consultation
+              </button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </motion.nav>
+  );
+}
