@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Flame } from 'lucide-react';
+import Link from 'next/link';
 import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 
 type PriorityStudent = {
@@ -123,7 +124,24 @@ export default function AdminPriorityQueue() {
                 <p style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{student.name}</p>
                 <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0' }}>{student.stage}</p>
               </div>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#ea580c' }}>{student.priority}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#ea580c' }}>{student.priority}</span>
+                <Link
+                  href={`/${student.id}/reports`}
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#1d4ed8',
+                    background: '#dbeafe',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    textDecoration: 'none',
+                  }}
+                >
+                  View Reports
+                </Link>
+              </div>
             </div>
           ))}
         </div>

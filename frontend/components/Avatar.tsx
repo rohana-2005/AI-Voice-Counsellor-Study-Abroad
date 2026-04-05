@@ -90,15 +90,18 @@ function extractErrorMessage(err: unknown): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function Avatar() {
+export default function Avatar({ studentId, studentPhone, studentName }: { studentId?: string; studentPhone?: string; studentName?: string }) {
   // Session state
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isMuted, setIsMuted] = useState(false);
+  const [isCalling, setIsCalling] = useState(false);
 
   // Transcript (string that accumulates over the session)
   const transcriptRef = useRef<string>('');
@@ -128,6 +131,8 @@ export default function Avatar() {
     isStartingRef.current = true;
     setStatus('connecting');
     setErrorMsg(null);
+    setSavedSessionId(null);
+    setSaveErrorMsg(null);
 
     try {
       const res = await fetch('http://localhost:8000/anam/session', { method: 'POST' });
@@ -333,14 +338,73 @@ export default function Avatar() {
       .join('\n');
 
     try {
-      await fetch('http://localhost:8000/save-session', {
+      const res = await fetch('http://localhost:8000/save-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: finalTranscript || transcriptRef.current }),
+        body: JSON.stringify({
+          transcript: finalTranscript || transcriptRef.current,
+          student_id: studentId,
+          student_phone: studentPhone,
+        }),
       });
-      console.log('[Avatar] Transcript saved successfully.');
+      const payload = (await res.json().catch(() => ({}))) as {
+        detail?: unknown;
+        status?: string;
+        message?: string;
+        inserted?: { id?: string };
+      };
+      if (!res.ok || payload.status === 'error') {
+        const detail = typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload.detail ?? payload);
+        throw new Error(detail || payload.message || `HTTP ${res.status}`);
+      }
+      const insertedId = payload.inserted?.id;
+      if (typeof insertedId === 'string' && insertedId.trim()) {
+        setSavedSessionId(insertedId);
+      }
+      setSaveErrorMsg(null);
+      console.log('[Avatar] Transcript and report saved successfully.');
     } catch (err) {
+      setSavedSessionId(null);
+      setSaveErrorMsg(extractErrorMessage(err));
       console.error('[Avatar] Failed to save transcript:', err);
+    }
+  };
+
+  const handlePhoneCall = async () => {
+    if (!studentId && !studentPhone) {
+      setErrorMsg('Missing student profile phone. Please complete onboarding first.');
+      return;
+    }
+
+    setIsCalling(true);
+    setErrorMsg(null);
+    try {
+      const recentTranscript = transcriptRef.current
+        .split('\n')
+        .filter((line) => line.trim())
+        .slice(-8)
+        .join('\n');
+
+      const res = await fetch('http://localhost:8000/api/v1/calls/outbound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: studentId,
+          student_phone: studentPhone,
+          student_name: studentName,
+          context: recentTranscript,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new Error(
+          typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`,
+        );
+      }
+    } catch (err) {
+      setErrorMsg(`Call failed: ${extractErrorMessage(err)}`);
+    } finally {
+      setIsCalling(false);
     }
   };
 
@@ -481,6 +545,17 @@ export default function Avatar() {
                 <span className="text-slate-200 text-xs font-semibold">{s.value}</span>
               </div>
             ))}
+
+            <div className="pt-2 border-t border-slate-800 mt-2 space-y-2">
+              <button
+                onClick={handlePhoneCall}
+                disabled={isCalling}
+                className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-slate-300 font-semibold text-xs py-2.5 rounded-xl border border-slate-700 transition"
+              >
+                <PhoneOff className="w-3.5 h-3.5 text-blue-400" />
+                {isCalling ? 'Calling...' : 'Connect via Phone Call'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -508,6 +583,14 @@ export default function Avatar() {
             </div>
             <div className="text-xs text-slate-600 font-mono">{messages.length} msgs</div>
           </div>
+
+          {(savedSessionId || saveErrorMsg) && (
+            <div className={`px-5 py-2 border-b text-[11px] font-medium ${savedSessionId ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-300'}`}>
+              {savedSessionId
+                ? `Saved Session ID: ${savedSessionId}`
+                : `Save failed: ${saveErrorMsg}`}
+            </div>
+          )}
 
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-5 space-y-3">
