@@ -5,7 +5,16 @@ import { Mic, MessageSquare, FileText, Download, X, ExternalLink, Loader2 } from
 import Link from 'next/link';
 import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 import { recentSessions } from '@/lib/mockData';
-import Link from 'next/link';
+
+type Session = {
+  id: string;
+  created_at?: string | null;
+  transcript?: string | null;
+  sentiment?: string | null;
+  lead_score?: number | null;
+  classification?: 'Hot' | 'Warm' | 'Cold' | string | null;
+  detailed_report?: string | null;
+};
 
 const sentimentCfg = {
   positive: { bg: '#f0fdf4', text: '#15803d', emoji: '', label: 'Positive' },
@@ -296,8 +305,8 @@ export default function SessionInsights() {
         {/* Session cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
           {displaySessions.map((session, i) => {
-            const sent = sentimentCfg[session.sentiment] || sentimentCfg.neutral;
-            const cls  = clsCfg[session.classification] || clsCfg.Warm;
+            const sent = sentimentCfg[session.sentiment as keyof typeof sentimentCfg] || sentimentCfg.neutral;
+            const cls  = clsCfg[session.classification as keyof typeof clsCfg] || clsCfg.Warm;
 
             return (
               <motion.div
@@ -449,6 +458,5 @@ export default function SessionInsights() {
           </motion.button>
         </Link>
       </motion.div>
-    </>
   );
 }
