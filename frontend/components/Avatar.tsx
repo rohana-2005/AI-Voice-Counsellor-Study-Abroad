@@ -335,7 +335,11 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
       const res = await fetch('http://localhost:8000/save-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: transcriptRef.current, student_id: studentId }),
+        body: JSON.stringify({
+          transcript: transcriptRef.current,
+          student_id: studentId,
+          student_phone: studentPhone,
+        }),
       });
       const payload = (await res.json().catch(() => ({}))) as {
         detail?: unknown;

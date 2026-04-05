@@ -14,7 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from typing import Literal, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request, Response, Form
+from fastapi import FastAPI, HTTPException, Query, Request, Response, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from pydantic import BaseModel, Field
@@ -366,6 +366,23 @@ class StudentCompleteRequest(BaseModel):
     full_name: str = Field(min_length=1)
     phone_number: str = Field(min_length=6)
     location: str | None = None
+
+
+class WhatsAppSummaryRequest(BaseModel):
+    student_id: str
+    call_session_id: str | None = None
+
+
+class WhatsAppReminderRequest(BaseModel):
+    student_id: str
+    scheduled_at: datetime
+    meeting_link: str | None = None
+
+
+class ProfileExtractRequest(BaseModel):
+    student_id: str
+    source: Literal["whatsapp", "website"]
+    text: str = Field(min_length=1)
 
 
 def _extract_terms(text: str) -> list[str]:
@@ -1091,12 +1108,14 @@ def get_recommendations(lead_id: str) -> RecommendationResponse:
 
 
 @app.post("/api/v1/appointments", tags=["appointments"])
-def create_appointment(payload: AppointmentCreateRequest) -> dict[str, str]:
-    # TODO: create booking in Google Calendar/Calendly and persist in Supabase.
+def create_appointment(payload: AppointmentCreateRequest, background_tasks: BackgroundTasks) -> dict[str, str]:
+    meeting = _create_meeting_row(student_id=payload.lead_id, scheduled_at=payload.starts_at, meeting_link=None)
+    background_tasks.add_task(_send_whatsapp_reminder, payload.lead_id, payload.starts_at, None)
     return {
-        "message": "Create appointment route",
+        "message": "Appointment created",
         "lead_id": payload.lead_id,
         "provider": payload.provider,
+        "meeting_id": str(meeting.get("id") or ""),
     }
 
 
@@ -1107,10 +1126,319 @@ def ingest_call_webhook(payload: CallWebhookRequest) -> dict[str, str]:
 
 
 def _normalize_phone_for_whatsapp(phone: str) -> str:
-    cleaned = phone.strip()
+    cleaned = (phone or "").strip()
     if cleaned.startswith("whatsapp:"):
+        suffix = cleaned.split("whatsapp:", 1)[1].strip()
+        if suffix and not suffix.startswith("+"):
+            return f"whatsapp:+{suffix}"
         return cleaned
+    if cleaned and not cleaned.startswith("+"):
+        cleaned = f"+{cleaned}"
     return f"whatsapp:{cleaned}"
+
+
+def _supabase_base_and_key() -> tuple[str, str]:
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE key.")
+    return supabase_url, service_key
+
+
+def _supabase_headers(service_key: str, with_json: bool = False, prefer_representation: bool = False) -> dict[str, str]:
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Accept": "application/json",
+    }
+    if with_json:
+        headers["Content-Type"] = "application/json"
+    if prefer_representation:
+        headers["Prefer"] = "return=representation"
+    return headers
+
+
+def _supabase_select(table: str, params: dict[str, str]) -> list[dict]:
+    supabase_url, service_key = _supabase_base_and_key()
+    req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/{table}?{urlencode(params)}",
+        headers=_supabase_headers(service_key),
+        method="GET",
+    )
+    with urlrequest.urlopen(req, timeout=20) as response:
+        rows = json.loads(response.read().decode("utf-8"))
+        return rows if isinstance(rows, list) else []
+
+
+def _supabase_insert(table: str, row: dict[str, Any]) -> dict[str, Any]:
+    supabase_url, service_key = _supabase_base_and_key()
+    req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/{table}",
+        data=json.dumps([row]).encode("utf-8"),
+        headers=_supabase_headers(service_key, with_json=True, prefer_representation=True),
+        method="POST",
+    )
+    with urlrequest.urlopen(req, timeout=20) as response:
+        rows = json.loads(response.read().decode("utf-8"))
+        return rows[0] if isinstance(rows, list) and rows else {}
+
+
+def _supabase_patch(table: str, row: dict[str, Any], filter_query: str) -> dict[str, Any]:
+    supabase_url, service_key = _supabase_base_and_key()
+    req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/{table}?{filter_query}",
+        data=json.dumps(row).encode("utf-8"),
+        headers=_supabase_headers(service_key, with_json=True, prefer_representation=True),
+        method="PATCH",
+    )
+    with urlrequest.urlopen(req, timeout=20) as response:
+        rows = json.loads(response.read().decode("utf-8"))
+        return rows[0] if isinstance(rows, list) and rows else {}
+
+
+def _get_student_by_id(student_id: str) -> dict[str, Any] | None:
+    rows = _supabase_select(
+        "students",
+        {
+            "select": "id,full_name,phone_number,email",
+            "id": f"eq.{student_id}",
+            "limit": "1",
+        },
+    )
+    return rows[0] if rows else None
+
+
+def _get_student_by_phone(phone_number: str) -> dict[str, Any] | None:
+    normalized = (phone_number or "").replace("whatsapp:", "").strip()
+    candidates = [normalized]
+    if normalized.startswith("+"):
+        candidates.append(normalized[1:])
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        rows = _supabase_select(
+            "students",
+            {
+                "select": "id,full_name,phone_number,email",
+                "phone_number": f"eq.{candidate}",
+                "limit": "1",
+            },
+        )
+        if rows:
+            return rows[0]
+
+    target_digits = _phone_digits(normalized)
+    if not target_digits:
+        return None
+    rows = _supabase_select("students", {"select": "id,full_name,phone_number,email", "limit": "1000"})
+    for row in rows:
+        if _phone_digits(str(row.get("phone_number") or "")) == target_digits:
+            return row
+    return None
+
+
+def _get_call_session(call_session_id: str) -> dict[str, Any] | None:
+    rows = _supabase_select(
+        "call_sessions",
+        {
+            "select": "id,student_id,transcript,sentiment,lead_score,classification,recommended_actions,detailed_report,created_at",
+            "id": f"eq.{call_session_id}",
+            "limit": "1",
+        },
+    )
+    return rows[0] if rows else None
+
+
+def _get_latest_call_session(student_id: str) -> dict[str, Any] | None:
+    rows = _supabase_select(
+        "call_sessions",
+        {
+            "select": "id,student_id,transcript,sentiment,lead_score,classification,recommended_actions,detailed_report,created_at",
+            "student_id": f"eq.{student_id}",
+            "order": "created_at.desc",
+            "limit": "1",
+        },
+    )
+    return rows[0] if rows else None
+
+
+def _build_summary_message(student_name: str, session: dict[str, Any]) -> str:
+    recommended_actions = str(session.get("recommended_actions") or "").strip()
+    detailed_report = str(session.get("detailed_report") or "").strip()
+
+    lines = [
+        f"Hi {student_name}! Here is your consultation summary.",
+        "",
+    ]
+    if detailed_report:
+        compact_report = detailed_report.strip()
+        if len(compact_report) > 900:
+            compact_report = compact_report[:900].rstrip() + "..."
+        lines += [f"Report:\n{compact_report}", ""]
+    else:
+        transcript_preview = str(session.get("transcript") or "").strip()
+        if transcript_preview:
+            if len(transcript_preview) > 280:
+                transcript_preview = transcript_preview[:280].rstrip() + "..."
+            lines += [f"Conversation Snapshot:\n{transcript_preview}", ""]
+
+    if recommended_actions:
+        compact_actions = recommended_actions.strip()
+        if len(compact_actions) > 450:
+            compact_actions = compact_actions[:450].rstrip() + "..."
+        lines += [f"Next Steps:\n{compact_actions}", ""]
+    lines.append("Our team will follow up with you shortly.")
+    return "\n".join(lines)
+
+
+def _twilio_send_whatsapp_message(to_number: str, body: str) -> str:
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+    raw_from = os.getenv("TWILIO_WHATSAPP_FROM") or "whatsapp:+14155238886"
+    status_callback = (os.getenv("TWILIO_WEBHOOK_BASE_URL") or "").strip().rstrip("/")
+    status_url = f"{status_callback}/api/v1/webhook/whatsapp-status" if _is_public_webhook_base(status_callback) else ""
+    if not account_sid or not auth_token:
+        raise HTTPException(status_code=500, detail="Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN.")
+
+    payload: dict[str, str] = {
+        "From": _normalize_phone_for_whatsapp(raw_from),
+        "To": _normalize_phone_for_whatsapp(to_number),
+        "Body": body,
+    }
+    if status_url:
+        payload["StatusCallback"] = status_url
+
+    with httpx.Client(timeout=20) as client:
+        response = client.post(
+            f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
+            auth=(account_sid, auth_token),
+            data=payload,
+        )
+
+    data = response.json() if response.content else {}
+    if response.status_code >= 400:
+        raise HTTPException(status_code=500, detail=data.get("message") or "Failed to send WhatsApp message")
+    return str(data.get("sid") or "")
+
+
+def _send_whatsapp_summary(student_id: str, call_session_id: str | None = None) -> dict[str, str]:
+    student = _get_student_by_id(student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    phone = str(student.get("phone_number") or "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Student phone number is missing.")
+
+    session = _get_call_session(call_session_id) if call_session_id else _get_latest_call_session(student_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No call session found for summary.")
+
+    body = _build_summary_message(str(student.get("full_name") or "Student"), session)
+    sid = _twilio_send_whatsapp_message(phone, body)
+    return {
+        "message_sid": sid,
+        "student_id": student_id,
+        "session_id": str(session.get("id") or ""),
+    }
+
+
+def _send_whatsapp_reminder(student_id: str, scheduled_at: datetime, meeting_link: str | None = None) -> dict[str, str]:
+    student = _get_student_by_id(student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    phone = str(student.get("phone_number") or "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Student phone number is missing.")
+
+    time_label = scheduled_at.strftime("%d %b %Y, %I:%M %p")
+    body = (
+        f"Hi {str(student.get('full_name') or 'Student')}, reminder: your counseling appointment is at {time_label}."
+        + (f"\nMeeting link: {meeting_link}" if meeting_link else "")
+    )
+    sid = _twilio_send_whatsapp_message(phone, body)
+    return {"message_sid": sid, "student_id": student_id}
+
+
+def _create_meeting_row(student_id: str, scheduled_at: datetime, meeting_link: str | None = None) -> dict[str, Any]:
+    return _supabase_insert(
+        "meetings",
+        {
+            "student_id": student_id,
+            "scheduled_at": scheduled_at.isoformat(),
+            "meeting_link": meeting_link,
+            "status": "scheduled",
+        },
+    )
+
+
+def _extract_profile_fields_from_text(text: str) -> dict[str, Any]:
+    extracted: dict[str, Any] = {}
+    body = text.strip()
+    if not body:
+        return extracted
+
+    lower = body.lower()
+    country_match = re.search(r"(?:country|countries|target country)\s*[:=-]\s*([a-zA-Z,\s]+)", body, re.IGNORECASE)
+    if country_match:
+        countries = [item.strip() for item in country_match.group(1).split(",") if item.strip()]
+        if countries:
+            extracted["target_countries"] = countries
+
+    course_match = re.search(r"(?:course|program|course interest)\s*[:=-]\s*([^\n;]+)", body, re.IGNORECASE)
+    if course_match:
+        extracted["course_interest"] = course_match.group(1).strip()
+
+    gpa_match = re.search(r"(?:gpa|cgpa|percentage)\s*[:=-]\s*([0-9]+(?:\.[0-9]+)?)", lower)
+    if gpa_match:
+        try:
+            extracted["gpa_percentage"] = float(gpa_match.group(1))
+        except Exception:
+            pass
+
+    budget_match = re.search(r"(?:budget|funds|fees)\s*[:=-]\s*([^\n;]+)", body, re.IGNORECASE)
+    if budget_match:
+        extracted["budget_range"] = budget_match.group(1).strip()
+
+    intake_match = re.search(r"(?:intake|timeline|session)\s*[:=-]\s*([^\n;]+)", body, re.IGNORECASE)
+    if intake_match:
+        extracted["intake_timing"] = intake_match.group(1).strip()
+
+    level_match = re.search(r"(?:level|edu level|education level)\s*[:=-]\s*([^\n;]+)", body, re.IGNORECASE)
+    if level_match:
+        extracted["edu_level"] = level_match.group(1).strip()
+
+    field_match = re.search(r"(?:field|current field|background)\s*[:=-]\s*([^\n;]+)", body, re.IGNORECASE)
+    if field_match:
+        extracted["current_field"] = field_match.group(1).strip()
+
+    return extracted
+
+
+def _upsert_academic_profile(student_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+    filtered = {k: v for k, v in fields.items() if v is not None and str(v).strip() != ""}
+    if not filtered:
+        return {}
+
+    existing = _supabase_select(
+        "academic_profiles",
+        {
+            "select": "id,student_id",
+            "student_id": f"eq.{student_id}",
+            "limit": "1",
+        },
+    )
+    filtered["updated_at"] = datetime.utcnow().isoformat()
+
+    if existing:
+        profile_id = str(existing[0].get("id") or "")
+        if not profile_id:
+            return {}
+        return _supabase_patch("academic_profiles", filtered, urlencode({"id": f"eq.{profile_id}"}))
+
+    return _supabase_insert("academic_profiles", {**filtered, "student_id": student_id})
 
 
 def _summarize_transcript_with_groq(transcript: str) -> str:
@@ -1515,9 +1843,16 @@ def _finalize_twilio_call_session(call_sid: str, fallback_phone: str = "") -> No
     student_id = state.get("student_id")
     if not student_id and fallback_phone:
         student_id = _resolve_student_id_by_phone(fallback_phone)
+    if not student_id:
+        state_phone = str(state.get("phone") or "").strip()
+        if state_phone:
+            student_id = _resolve_student_id_by_phone(state_phone)
 
     try:
-        _insert_call_session(transcript=transcript, student_id=student_id)
+        inserted = _insert_call_session(transcript=transcript, student_id=student_id)
+        inserted_id = str(inserted.get("id") or "") if isinstance(inserted, dict) else ""
+        if student_id and inserted_id:
+            _send_whatsapp_summary(str(student_id), inserted_id)
     except Exception:
         pass
     finally:
@@ -1713,97 +2048,194 @@ def handle_call_transcription(
     if not TranscriptionText.strip():
         return {"status": "skipped", "reason": "empty_transcription", "call_sid": CallSid}
 
-    summary = _summarize_transcript_with_groq(TranscriptionText)
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_number = os.getenv("TWILIO_WHATSAPP_FROM")
-    to_number = Caller or Called
-
-    if account_sid and auth_token and from_number and to_number:
-        try:
-            with httpx.Client(timeout=20) as client:
-                client.post(
-                    f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
-                    auth=(account_sid, auth_token),
-                    data={
-                        "From": _normalize_phone_for_whatsapp(from_number),
-                        "To": _normalize_phone_for_whatsapp(to_number),
-                        "Body": f"Call summary:\n\n{summary}\n\nRecording: {RecordingUrl}",
-                    },
-                )
-        except Exception:
-            # Keep webhook healthy even if messaging fails.
-            pass
-
     student_phone = _extract_student_phone_from_call(Caller, Called)
     student_id = _resolve_student_id_by_phone(student_phone)
-    inserted_session_id = None
+    inserted_session_id = ""
+    whatsapp: dict[str, Any] = {
+        "attempted": False,
+        "sent": False,
+        "message_sid": None,
+        "error": None,
+    }
+
     try:
         inserted = _insert_call_session(transcript=TranscriptionText, student_id=student_id)
-        inserted_session_id = inserted.get("id") if isinstance(inserted, dict) else None
+        inserted_session_id = str(inserted.get("id") or "") if isinstance(inserted, dict) else ""
+
+        if student_id and inserted_session_id:
+            whatsapp["attempted"] = True
+            try:
+                sent = _send_whatsapp_summary(str(student_id), inserted_session_id)
+                whatsapp["sent"] = True
+                whatsapp["message_sid"] = sent.get("message_sid")
+            except Exception as err:
+                whatsapp["error"] = str(err)
     except Exception:
-        pass
+        if not whatsapp["error"]:
+            whatsapp["error"] = "Failed to save call session from transcription webhook."
 
     return {
         "status": "ok",
         "call_sid": CallSid,
-        "summary": summary,
+        "student_id": student_id,
         "session_id": inserted_session_id,
+        "whatsapp": whatsapp,
     }
 
 @app.post("/api/v1/webhook/whatsapp-incoming")
+@app.post("/api/v1/webhook/whatsapp/incoming")
 def handle_whatsapp_incoming(
     Body: str = Form(...),
-    From: str = Form(...)
+    From: str = Form(...),
+    ProfileName: str = Form(default=""),
+    WaId: str = Form(default=""),
 ):
-    print(f"WhatsApp message from {From}: {Body}")
+    text = (Body or "").strip()
+    student = _get_student_by_phone(From)
+
+    if not student:
+        fallback_phone = WaId.strip()
+        if fallback_phone:
+            student = _get_student_by_phone(f"+{fallback_phone}")
+
+    if not student:
+        reply = "Hi! We do not have your number on file. Please contact our team to get registered."
+        twiml = (
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            "<Response>"
+            f"<Message>{escape(reply)}</Message>"
+            "</Response>"
+        )
+        return Response(content=twiml, media_type="application/xml")
+
+    student_id = str(student.get("id") or "")
+    student_name = str(student.get("full_name") or ProfileName or "there")
+    upper = text.upper()
+
+    if upper.startswith("SUMMARY"):
+        try:
+            _send_whatsapp_summary(student_id)
+            reply = "Done. I sent your latest session summary."
+        except Exception as err:
+            reply = f"Could not send summary right now: {err}"
+    elif upper.startswith("BOOK"):
+        raw = text[4:].strip()
+        parsed_time = None
+        for fmt in ("%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M", "%d-%m-%Y %H:%M"):
+            try:
+                parsed_time = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+
+        if not parsed_time:
+            reply = "Booking format not recognized. Use: BOOK YYYY-MM-DD HH:MM"
+        else:
+            try:
+                meeting = _create_meeting_row(student_id=student_id, scheduled_at=parsed_time, meeting_link=None)
+                _send_whatsapp_reminder(student_id, parsed_time, None)
+                reply = f"Appointment booked. Meeting ID: {meeting.get('id', '')}"
+            except Exception as err:
+                reply = f"Could not book appointment: {err}"
+    else:
+        extracted = _extract_profile_fields_from_text(text)
+        if extracted:
+            try:
+                _upsert_academic_profile(student_id, extracted)
+                keys = ", ".join(sorted(extracted.keys()))
+                reply = f"Thanks {student_name}. I updated your profile fields: {keys}."
+            except Exception as err:
+                reply = f"I read your details but could not update profile now: {err}"
+        else:
+            reply = (
+                f"Hi {student_name}. Send SUMMARY for latest call summary, "
+                "BOOK YYYY-MM-DD HH:MM to schedule, or share profile details like "
+                "country: Canada, course: MS CS, gpa: 8.2, budget: 30L."
+            )
+
     twiml = (
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
         "<Response>"
-        "<Message>Got your message! We will summarize and reply shortly.</Message>"
+        f"<Message>{escape(reply)}</Message>"
         "</Response>"
     )
-    return Response(content=twiml, media_type="text/xml")
+    return Response(content=twiml, media_type="application/xml")
+
+
+@app.post("/api/v1/webhook/whatsapp-status")
+@app.post("/api/v1/webhook/whatsapp/status")
+def handle_whatsapp_status(
+    MessageSid: str = Form(...),
+    MessageStatus: str = Form(...),
+    To: str = Form(default=""),
+    ErrorCode: str = Form(default=""),
+    ErrorMessage: str = Form(default=""),
+):
+    return {
+        "status": "ok",
+        "message_sid": MessageSid,
+        "message_status": MessageStatus,
+        "to": To,
+        "error_code": ErrorCode,
+        "error_message": ErrorMessage,
+    }
 
 
 @app.post("/api/v1/messages/whatsapp/send-summary", tags=["messaging"])
-def send_whatsapp_summary(lead_id: str = Query(...)) -> dict[str, str]:
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_number = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+def send_whatsapp_summary(
+    student_id: str | None = Query(default=None),
+    lead_id: str | None = Query(default=None),
+    call_session_id: str | None = Query(default=None),
+) -> dict[str, str]:
+    final_student_id = (student_id or lead_id or "").strip()
+    if not final_student_id:
+        raise HTTPException(status_code=400, detail="Provide student_id or lead_id.")
+    result = _send_whatsapp_summary(final_student_id, call_session_id)
+    return {
+        "message": "WhatsApp summary sent",
+        "student_id": result["student_id"],
+        "session_id": result["session_id"],
+        "message_sid": result["message_sid"],
+    }
 
-    if not account_sid or not auth_token:
-        raise HTTPException(
-            status_code=500, detail="Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN."
-        )
 
-    # Simplified stub for retrieving a lead and sending a message
-    to_number = "whatsapp:+1234567890"  # Replace with actual lead phone number
-    summary = "Here is your summary..."
+@app.post("/api/v1/messages/whatsapp/send-reminder", tags=["messaging"])
+def send_whatsapp_reminder(payload: WhatsAppReminderRequest) -> dict[str, str]:
+    result = _send_whatsapp_reminder(
+        student_id=payload.student_id,
+        scheduled_at=payload.scheduled_at,
+        meeting_link=payload.meeting_link,
+    )
+    return {
+        "message": "WhatsApp reminder sent",
+        "student_id": result["student_id"],
+        "message_sid": result["message_sid"],
+    }
 
-    try:
-        with httpx.Client(timeout=20) as client:
-            response = client.post(
-                f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
-                auth=(account_sid, auth_token),
-                data={
-                    "From": from_number,
-                    "To": to_number,
-                    "Body": f"📋 *Call Summary*\n\n{summary}",
-                },
-            )
 
-        data = response.json() if response.content else {}
-        if response.status_code >= 400:
-            raise HTTPException(status_code=500, detail=data.get("message") or "Failed to send WhatsApp summary")
+@app.post("/api/v1/profiles/extract", tags=["students"])
+def extract_profile_data(payload: ProfileExtractRequest) -> dict[str, Any]:
+    student = _get_student_by_id(payload.student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
 
+    extracted = _extract_profile_fields_from_text(payload.text)
+    if not extracted:
         return {
-            "message": "WhatsApp summary sent",
-            "lead_id": lead_id,
-            "message_sid": str(data.get("sid", "")),
+            "message": "No profile fields extracted",
+            "student_id": payload.student_id,
+            "source": payload.source,
+            "updated_profile": {},
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    updated_profile = _upsert_academic_profile(payload.student_id, extracted)
+    return {
+        "message": "Profile data extracted and saved",
+        "student_id": payload.student_id,
+        "source": payload.source,
+        "extracted": extracted,
+        "updated_profile": updated_profile,
+    }
 
 
 @app.post("/api/v1/book", tags=["appointments"])
@@ -2314,15 +2746,38 @@ async def create_anam_session(request: Request) -> SessionTokenResponse:
 class SaveSessionRequest(BaseModel):
     transcript: str
     student_id: Optional[str] = None
+    student_phone: Optional[str] = None
 
 @app.post("/save-session")
 async def save_session(request: SaveSessionRequest):
     try:
+        normalized_student_id = request.student_id if request.student_id and request.student_id != "undefined" else None
+        if not normalized_student_id and request.student_phone:
+            normalized_student_id = _resolve_student_id_by_phone(request.student_phone)
+
         inserted = _insert_call_session(
             transcript=request.transcript,
-            student_id=request.student_id if request.student_id and request.student_id != "undefined" else None,
+            student_id=normalized_student_id,
         )
-        return {"status": "success", "inserted": inserted}
+        session_id = str(inserted.get("id") or "") if isinstance(inserted, dict) else ""
+        student_id = str(inserted.get("student_id") or normalized_student_id or "").strip()
+        whatsapp: dict[str, Any] = {
+            "attempted": False,
+            "sent": False,
+            "message_sid": None,
+            "error": None,
+        }
+
+        if student_id and session_id:
+            whatsapp["attempted"] = True
+            try:
+                result = _send_whatsapp_summary(student_id, session_id)
+                whatsapp["sent"] = True
+                whatsapp["message_sid"] = result.get("message_sid")
+            except Exception as err:
+                whatsapp["error"] = str(err)
+
+        return {"status": "success", "inserted": inserted, "whatsapp": whatsapp}
     except HTTPError as err:
         detail = err.read().decode("utf-8") if err.fp else str(err)
         raise HTTPException(status_code=502, detail=f"Failed to insert call session: {detail}") from err
