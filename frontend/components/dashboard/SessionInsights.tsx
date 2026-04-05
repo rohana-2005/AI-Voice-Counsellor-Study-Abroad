@@ -5,32 +5,18 @@ import { Mic, MessageSquare, FileText, Download, X, ExternalLink, Loader2 } from
 import Link from 'next/link';
 import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 import { recentSessions } from '@/lib/mockData';
+import Link from 'next/link';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Session {
-  id: string;
-  student_id?: string;
-  sentiment?: string;
-  lead_score?: number;
-  classification?: 'Hot' | 'Warm' | 'Cold' | string;
-  created_at?: string;
-  detailed_report?: string;
-  transcript?: string;
-}
-
-// ─── Config maps ─────────────────────────────────────────────────────────────
-
-const sentimentCfg: Record<string, { bg: string; text: string; emoji: string; label: string }> = {
-  positive: { bg: '#f0fdf4', text: '#15803d', emoji: '😊', label: 'Positive' },
-  neutral:  { bg: '#fffbeb', text: '#b45309', emoji: '😐', label: 'Neutral'  },
-  negative: { bg: '#fef2f2', text: '#dc2626', emoji: '😔', label: 'Negative' },
+const sentimentCfg = {
+  positive: { bg: '#f0fdf4', text: '#15803d', emoji: '', label: 'Positive' },
+  neutral:  { bg: '#fffbeb', text: '#b45309', emoji: '', label: 'Neutral'  },
+  negative: { bg: '#fef2f2', text: '#dc2626', emoji: '', label: 'Negative' },
 };
 
-const clsCfg: Record<string, { bg: string; text: string; border: string; emoji: string }> = {
-  Hot:  { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', emoji: '🔥' },
-  Warm: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', emoji: '🌡️' },
-  Cold: { bg: '#eef2ff', text: '#4338ca', border: '#c7d2fe', emoji: '❄️' },
+const clsCfg = {
+  Hot:  { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', emoji: '' },
+  Warm: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', emoji: '' },
+  Cold: { bg: '#eef2ff', text: '#4338ca', border: '#c7d2fe', emoji: '' },
 };
 
 // ─── PDF Modal ────────────────────────────────────────────────────────────────
@@ -270,61 +256,42 @@ export default function SessionInsights() {
       }));
 
   return (
-    <>
-      {/* PDF Modal */}
-      {modalSessionId && (
-        <PdfModal
-          sessionId={modalSessionId}
-          onClose={() => setModalSessionId(null)}
-        />
-      )}
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '20px',
-          padding: '24px',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: 36, height: 36, borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <MessageSquare size={18} color="#2563eb" />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>📞 Session Insights</h3>
-              <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
-                {sessions.length > 0 ? `${sessions.length} live session${sessions.length !== 1 ? 's' : ''} found` : 'Recent AI counseling sessions'}
-              </p>
-            </div>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '20px',
+        padding: '24px',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: 36, height: 36, borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MessageSquare size={18} color="#2563eb" />
           </div>
-          <Link href="/session" style={{ textDecoration: 'none' }}>
-            <button style={{
-              fontSize: '12px', fontWeight: 500, color: '#475569',
-              background: '#f8fafc', border: '1px solid #e2e8f0',
-              borderRadius: '8px', padding: '6px 12px', cursor: 'pointer',
-            }}>
-              View All
-            </button>
-          </Link>
+          <div>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>Session Insights</h3>
+            <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Recent AI counseling sessions</p>
+          </div>
         </div>
-
-        {/* Loading state */}
-        {loadingSessions && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0', marginBottom: 8 }}>
-            <Loader2 style={{ width: 14, height: 14, color: '#2563eb', animation: 'spin 1s linear infinite' }} />
-            <span style={{ fontSize: 12, color: '#64748b' }}>Loading your sessions…</span>
-          </div>
-        )}
+        <Link href="/session" style={{ textDecoration: 'none' }}>
+          <button style={{
+            fontSize: '12px', fontWeight: 500, color: '#475569',
+            background: '#f8fafc', border: '1px solid #e2e8f0',
+            borderRadius: '8px', padding: '6px 12px', cursor: 'pointer',
+          }}>
+            View All
+          </button>
+        </Link>
+      </div>
 
         {/* Session cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>

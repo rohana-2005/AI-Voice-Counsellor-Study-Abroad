@@ -10,10 +10,10 @@ import SessionInsights from '@/components/dashboard/SessionInsights';
 import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 
 const quickStats = [
-  { label: 'Readiness Score', value: '78%', icon: '🎯', change: '+5% this week', positive: true },
-  { label: 'Universities', value: '5', icon: '🏛️', change: 'Matched today', positive: true },
-  { label: 'Sessions', value: '2', icon: '📞', change: 'Last: Apr 3', positive: true },
-  { label: 'Next Deadline', value: '26 days', icon: '⏰', change: 'UCD · Apr 30', positive: false },
+  { label: 'Readiness Score', value: '78%', icon: 'RS', change: '+5% this week', positive: true },
+  { label: 'Universities', value: '5', icon: 'UN', change: 'Matched today', positive: true },
+  { label: 'Sessions', value: '2', icon: 'SE', change: 'Last: Apr 3', positive: true },
+  { label: 'Next Deadline', value: '26 days', icon: 'DL', change: 'UCD · Apr 30', positive: false },
 ];
 
 export default function DashboardPageClient() {
@@ -22,7 +22,7 @@ export default function DashboardPageClient() {
 
   return (
     <DashboardLayout
-      title={`Welcome back, ${firstName} 👋`}
+      title={`Welcome back, ${firstName}`}
       subtitle="Your study abroad journey is on track · April 2026"
     >
       <div

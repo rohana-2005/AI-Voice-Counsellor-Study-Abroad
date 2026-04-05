@@ -331,12 +331,18 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
       } catch {/* ignore */}
     }
 
+    // Build the transcript from the live UI messages directly,
+    // ensuring we capture partially streamed sentences that haven't triggered endOfSpeech yet.
+    const finalTranscript = messages
+      .map((m) => `[${m.role === 'ai' ? 'AI' : 'USER'}]: ${m.text}`)
+      .join('\n');
+
     try {
       const res = await fetch('http://localhost:8000/save-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transcript: transcriptRef.current,
+          transcript: finalTranscript || transcriptRef.current,
           student_id: studentId,
           student_phone: studentPhone,
         }),
@@ -624,9 +630,9 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
           }}>
             <p style={{ color: '#94a3b8', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Session Info</p>
             {[
-              { label: 'AI Counselor', value: 'StudyAbroad AI', icon: '🤖' },
-              { label: 'Messages', value: messages.length.toString(), icon: '💬' },
-              { label: 'Status', value: status === 'connected' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1), icon: '📡' },
+              { label: 'AI Counselor', value: 'StudyAbroad AI', icon: '' },
+              { label: 'Messages', value: messages.length.toString(), icon: '' },
+              { label: 'Status', value: status === 'connected' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1), icon: '' },
             ].map((s) => (
               <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <span style={{ color: '#64748b', fontSize: 12 }}>{s.icon} {s.label}</span>
@@ -667,18 +673,9 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
         >
 
           {/* Chat header */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '16px 20px', borderBottom: '1px solid #f1f5f9',
-            flexShrink: 0,
-          }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 12,
-              background: 'linear-gradient(135deg, #2563eb, #4338ca)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, boxShadow: '0 4px 10px rgba(37,99,235,0.2)',
-            }}>
-              <span style={{ fontSize: 16, lineHeight: 1 }}>🤖</span>
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800 flex-shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-900/30 flex-shrink-0">
+              <span className="text-base leading-none">AI</span>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>AI Counselor</p>
@@ -687,13 +684,13 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                 color: status === 'connected' ? '#15803d' : '#94a3b8',
               }}>
                 {status === 'connected'
-                  ? '● Live conversation'
+                  ? 'Live conversation'
                   : status === 'connecting'
-                  ? '⟳ Connecting…'
+                  ? 'Connecting…'
                   : status === 'ended'
                   ? 'Session ended'
                   : status === 'error'
-                  ? '✕ Connection error'
+                  ? 'Connection error'
                   : 'Starting…'}
               </p>
             </div>
@@ -718,17 +715,9 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
           <div className="flex-1 overflow-y-auto" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Empty state */}
             {messages.length === 0 && status !== 'error' && (
-              <div style={{
-                flex: 1, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                gap: 12, textAlign: 'center', padding: '48px 0',
-              }}>
-                <div style={{
-                  width: 64, height: 64, borderRadius: 18,
-                  background: '#eff6ff', border: '1px solid #bfdbfe',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <span style={{ fontSize: 28 }}>🎓</span>
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
+                <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center">
+                  <span className="text-3xl">AI</span>
                 </div>
                 <div>
                   <p style={{ color: '#475569', fontSize: 14, fontWeight: 600, margin: 0 }}>Session starting…</p>
@@ -748,16 +737,14 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                   className={`flex gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                 >
                   {/* Avatar icon */}
-                  <div style={{
-                    width: 28, height: 28, borderRadius: '50%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 2,
-                    background: msg.role === 'ai'
-                      ? 'linear-gradient(135deg, #2563eb, #4338ca)'
-                      : 'linear-gradient(135deg, #e2e8f0, #cbd5e1)',
-                    color: msg.role === 'ai' ? '#ffffff' : '#475569',
-                  }}>
-                    {msg.role === 'ai' ? '🤖' : 'U'}
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${
+                      msg.role === 'ai'
+                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
+                        : 'bg-gradient-to-br from-slate-600 to-slate-700 text-slate-200'
+                    }`}
+                  >
+                    {msg.role === 'ai' ? 'AI' : 'U'}
                   </div>
 
                   {/* Bubble */}
@@ -787,7 +774,7 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                       color: msg.role === 'ai' ? '#cbd5e1' : '#93c5fd',
                     }}>
                       {msg.timestamp}
-                      {msg.isStreaming && <span style={{ marginLeft: 4, color: '#3b82f6', animation: 'pulse 1s ease-in-out infinite' }}>● streaming</span>}
+                      {msg.isStreaming && <span className="ml-1 text-blue-400 animate-pulse">streaming</span>}
                     </p>
                   </div>
                 </motion.div>

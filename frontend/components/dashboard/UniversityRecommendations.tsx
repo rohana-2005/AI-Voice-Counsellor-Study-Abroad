@@ -65,10 +65,8 @@ export default function UniversityRecommendations() {
             <Sparkles size={18} color="#2563eb" />
           </div>
           <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>🎓 AI University Recommendations</h3>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
-              {loading ? 'Loading default picks...' : 'Default 3 loaded, personalized by your session'}
-            </p>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>AI University Recommendations</h3>
+            <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Matched to your profile &amp; goals</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

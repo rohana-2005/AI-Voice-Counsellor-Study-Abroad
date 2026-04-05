@@ -93,7 +93,7 @@ export const universityRecommendations = [
     id: 1,
     name: "University of Manchester",
     country: "United Kingdom",
-    flag: "🇬🇧",
+    flag: "UK",
     tuition: "£24,000/yr",
     ranking: "#6 QS UK",
     course: "MSc Data Science",
@@ -106,7 +106,7 @@ export const universityRecommendations = [
     id: 2,
     name: "University College Dublin",
     country: "Ireland",
-    flag: "🇮🇪",
+    flag: "IE",
     tuition: "€18,500/yr",
     ranking: "#2 QS Ireland",
     course: "MSc Data Analytics",
@@ -119,7 +119,7 @@ export const universityRecommendations = [
     id: 3,
     name: "University of Bristol",
     country: "United Kingdom",
-    flag: "🇬🇧",
+    flag: "UK",
     tuition: "£22,500/yr",
     ranking: "#8 QS UK",
     course: "MSc Machine Learning",
@@ -132,7 +132,7 @@ export const universityRecommendations = [
     id: 4,
     name: "Trinity College Dublin",
     country: "Ireland",
-    flag: "🇮🇪",
+    flag: "IE",
     tuition: "€21,000/yr",
     ranking: "#1 QS Ireland",
     course: "MSc Computer Science",
@@ -145,7 +145,7 @@ export const universityRecommendations = [
     id: 5,
     name: "University of Toronto",
     country: "Canada",
-    flag: "🇨🇦",
+    flag: "CA",
     tuition: "CA$32,000/yr",
     ranking: "#21 QS World",
     course: "MEng Data Science",
@@ -158,17 +158,17 @@ export const universityRecommendations = [
 
 export const kanbanTasks = {
   "to-start": [
-    { id: "k1", title: "IELTS Preparation", priority: "High", icon: "📝", dueDate: "May 2025" },
-    { id: "k2", title: "SOP Writing", priority: "Medium", icon: "✍️", dueDate: "Jun 2025" },
-    { id: "k3", title: "Financial Documents", priority: "Low", icon: "💰", dueDate: "Jul 2025" },
+    { id: "k1", title: "IELTS Preparation", priority: "High", icon: "DOC", dueDate: "May 2025" },
+    { id: "k2", title: "SOP Writing", priority: "Medium", icon: "WRITE", dueDate: "Jun 2025" },
+    { id: "k3", title: "Financial Documents", priority: "Low", icon: "MONEY", dueDate: "Jul 2025" },
   ],
   "in-progress": [
-    { id: "k4", title: "Shortlisting Universities", priority: "High", icon: "🎓", dueDate: "Apr 2025" },
-    { id: "k5", title: "Letters of Recommendation", priority: "Medium", icon: "📋", dueDate: "May 2025" },
+    { id: "k4", title: "Shortlisting Universities", priority: "High", icon: "UNI", dueDate: "Apr 2025" },
+    { id: "k5", title: "Letters of Recommendation", priority: "Medium", icon: "LOR", dueDate: "May 2025" },
   ],
   completed: [
-    { id: "k6", title: "Initial Counseling Session", priority: "Done", icon: "✅", dueDate: "Mar 2025" },
-    { id: "k7", title: "Profile Assessment", priority: "Done", icon: "📊", dueDate: "Mar 2025" },
+    { id: "k6", title: "Initial Counseling Session", priority: "Done", icon: "DONE", dueDate: "Mar 2025" },
+    { id: "k7", title: "Profile Assessment", priority: "Done", icon: "REPORT", dueDate: "Mar 2025" },
   ],
 };
 
@@ -178,7 +178,7 @@ export const testimonials = [
     name: "Priya Mehta",
     university: "University of Manchester",
     country: "United Kingdom",
-    flag: "🇬🇧",
+    flag: "UK",
     text: "The AI counselor helped me choose the perfect course and university. I got a merit scholarship too! The process was incredibly smooth from shortlisting to visa.",
     rating: 5,
     course: "MSc Data Science",
@@ -189,7 +189,7 @@ export const testimonials = [
     name: "Rahul Verma",
     university: "Trinity College Dublin",
     country: "Ireland",
-    flag: "🇮🇪",
+    flag: "IE",
     text: "I was confused between 6 universities. The AI analysis gave me a clarity score and matched me with the right one. Got a Chevening scholarship recommendation too!",
     rating: 5,
     course: "MBA Finance",
@@ -200,7 +200,7 @@ export const testimonials = [
     name: "Anjali Singh",
     university: "University of Toronto",
     country: "Canada",
-    flag: "🇨🇦",
+    flag: "CA",
     text: "The conversational AI made the entire process feel personal. It was like talking to an expert counselor at 2am when I had doubts. Absolutely love this platform!",
     rating: 5,
     course: "MEng Computer Science",
@@ -211,7 +211,7 @@ export const testimonials = [
     name: "Karan Patel",
     university: "University of Birmingham",
     country: "United Kingdom",
-    flag: "🇬🇧",
+    flag: "UK",
     text: "The readiness score helped me understand exactly what I needed to improve. Within 2 months I went from a Cold lead to Hot. Admitted with partial scholarship!",
     rating: 5,
     course: "MSc AI & Machine Learning",
@@ -222,7 +222,7 @@ export const testimonials = [
 export const countries = [
   {
     name: "United Kingdom",
-    flag: "🇬🇧",
+    flag: "UK",
     universities: "120+",
     avgTuition: "£18,000–£35,000",
     workVisa: "2-year Graduate Route",
@@ -234,7 +234,7 @@ export const countries = [
   },
   {
     name: "Ireland",
-    flag: "🇮🇪",
+    flag: "IE",
     universities: "25+",
     avgTuition: "€10,000–€25,000",
     workVisa: "2-year Stay Back",
@@ -246,7 +246,7 @@ export const countries = [
   },
   {
     name: "Canada",
-    flag: "🇨🇦",
+    flag: "CA",
     universities: "80+",
     avgTuition: "CA$20,000–CA$45,000",
     workVisa: "3-year PGWP",
@@ -258,7 +258,7 @@ export const countries = [
   },
   {
     name: "United States",
-    flag: "🇺🇸",
+    flag: "US",
     universities: "200+",
     avgTuition: "$25,000–$55,000",
     workVisa: "3-year OPT (STEM)",
@@ -271,12 +271,12 @@ export const countries = [
 ];
 
 export const stats = [
-  { value: "40,000+", label: "Students Counseled", icon: "👨‍🎓" },
-  { value: "120+", label: "Partner Universities", icon: "🏛️" },
-  { value: "99%", label: "Visa Success Rate", icon: "✈️" },
-  { value: "21+", label: "Years of Experience", icon: "🏆" },
-  { value: "4", label: "Countries Covered", icon: "🌍" },
-  { value: "Free", label: "AI Consultation", icon: "🤖" },
+  { value: "40,000+", label: "Students Counseled", icon: "STU" },
+  { value: "120+", label: "Partner Universities", icon: "UNI" },
+  { value: "99%", label: "Visa Success Rate", icon: "VISA" },
+  { value: "21+", label: "Years of Experience", icon: "YRS" },
+  { value: "4", label: "Countries Covered", icon: "CTR" },
+  { value: "Free", label: "AI Consultation", icon: "AI" },
 ];
 
 export const onboardingQuestions = [

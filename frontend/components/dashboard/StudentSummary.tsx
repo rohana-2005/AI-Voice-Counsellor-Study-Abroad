@@ -121,7 +121,7 @@ export default function StudentSummary() {
           fontSize: '11px', fontWeight: 600, color: '#b45309',
           background: '#fffbeb', border: '1px solid #fde68a',
           padding: '4px 10px', borderRadius: '999px',
-        }}>📅 {academicProfile.test_status}</span>
+        }}>{academicProfile.test_status}</span>
       </div>
     </motion.div>
   );

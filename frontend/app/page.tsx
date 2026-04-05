@@ -1,11 +1,10 @@
 'use client';
 import { motion, useInView } from 'framer-motion';
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight, CheckCircle2, Star, Mic, Play,
-  Shield, GraduationCap, Phone, Mail, MapPin, Users,
-  TrendingUp,
+  Shield, GraduationCap, TrendingUp, Zap, Target, Users,
 } from 'lucide-react';
 import { stats, countries, testimonials } from '@/lib/mockData';
 
@@ -57,144 +56,384 @@ function SectionHeader({
   );
 }
 
+/* ─── Hero Right: AI Visual Panel ──────────────────── */
+function HeroVisual() {
+  const conversation = [
+    { role: 'ai',   text: "What's your current education level?" },
+    { role: 'user', text: "Bachelor's in Engineering" },
+    { role: 'ai',   text: "Great choice! What's your target country?" },
+  ];
+
+  return (
+    <div style={{ position: 'relative', height: '420px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+
+      {/* ── Main session card ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.2 }}
+        style={{
+          position: 'relative',
+          width: '300px',
+          background: 'rgba(255,255,255,0.88)',
+          backdropFilter: 'blur(16px)',
+          borderRadius: '22px',
+          border: '1px solid rgba(226,232,240,0.8)',
+          boxShadow: '0 20px 60px rgba(37,99,235,0.12), 0 4px 16px rgba(0,0,0,0.06)',
+          padding: '20px',
+          zIndex: 10,
+        }}
+      >
+        {/* Card header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: '10px',
+            background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Mic size={16} color="#fff" />
+          </div>
+          <div>
+            <p style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>AI Counseling Session</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
+              <span style={{ width: 6, height: 6, background: '#22c55e', borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.8s infinite' }} />
+              <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>Live</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Conversation bubbles */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {conversation.map((msg, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: msg.role === 'ai' ? -10 : 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 + i * 0.18 }}
+              style={{
+                display: 'flex',
+                justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              }}
+            >
+              <div style={{
+                maxWidth: '85%',
+                padding: '8px 12px',
+                borderRadius: msg.role === 'ai' ? '14px 14px 14px 4px' : '14px 14px 4px 14px',
+                background: msg.role === 'ai'
+                  ? '#f8fafc'
+                  : 'linear-gradient(135deg, #2563eb, #4f46e5)',
+                color: msg.role === 'ai' ? '#334155' : '#fff',
+                fontSize: '11.5px',
+                fontWeight: 500,
+                lineHeight: 1.5,
+                border: msg.role === 'ai' ? '1px solid #e2e8f0' : 'none',
+                boxShadow: msg.role === 'user' ? '0 2px 8px rgba(37,99,235,0.22)' : 'none',
+              }}>
+                {msg.text}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Typing indicator */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.1 }}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px' }}
+        >
+          <div style={{ display: 'flex', gap: '3px' }}>
+            {[0, 1, 2].map(i => (
+              <motion.span
+                key={i}
+                animate={{ y: [0, -4, 0] }}
+                transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.18 }}
+                style={{ width: 4, height: 4, background: '#94a3b8', borderRadius: '50%', display: 'inline-block' }}
+              />
+            ))}
+          </div>
+          <span style={{ fontSize: '10px', color: '#94a3b8' }}>AI is thinking…</span>
+        </motion.div>
+      </motion.div>
+
+      {/* ── Top-left floating: Lead Score ── */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1, y: [0, -6, 0] }}
+        transition={{ opacity: { delay: 0.7 }, scale: { delay: 0.7 }, y: { repeat: Infinity, duration: 3.5, ease: 'easeInOut' } }}
+        style={{
+          position: 'absolute', top: '30px', left: '10px',
+          background: 'rgba(255,255,255,0.96)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(226,232,240,0.9)',
+          borderRadius: '14px',
+          padding: '10px 14px',
+          boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+          display: 'flex', alignItems: 'center', gap: '9px',
+          zIndex: 20,
+        }}
+      >
+        <div style={{
+          width: 32, height: 32, borderRadius: '9px',
+          background: 'linear-gradient(135deg, #0ea5e9, #2563eb)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <TrendingUp size={14} color="#fff" />
+        </div>
+        <div>
+          <p style={{ fontSize: '10px', color: '#64748b', fontWeight: 500 }}>Lead Score</p>
+          <p style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>82%</p>
+        </div>
+      </motion.div>
+
+      {/* ── Top-right floating: Qualified Lead ── */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1, y: [0, -5, 0] }}
+        transition={{ opacity: { delay: 0.85 }, scale: { delay: 0.85 }, y: { repeat: Infinity, duration: 2.8, ease: 'easeInOut', delay: 0.5 } }}
+        style={{
+          position: 'absolute', top: '42px', right: '8px',
+          background: 'rgba(255,255,255,0.96)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(34,197,94,0.25)',
+          borderRadius: '12px',
+          padding: '9px 13px',
+          boxShadow: '0 6px 18px rgba(0,0,0,0.08)',
+          display: 'flex', alignItems: 'center', gap: '7px',
+          zIndex: 20,
+        }}
+      >
+        <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+        <span style={{ fontSize: '11px', fontWeight: 700, color: '#15803d' }}>Qualified Lead</span>
+      </motion.div>
+
+      {/* ── Bottom-left floating: Top Match ── */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1, y: [0, -5, 0] }}
+        transition={{ opacity: { delay: 1 }, scale: { delay: 1 }, y: { repeat: Infinity, duration: 4, ease: 'easeInOut', delay: 1 } }}
+        style={{
+          position: 'absolute', bottom: '38px', left: '8px',
+          background: 'rgba(255,255,255,0.96)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(226,232,240,0.9)',
+          borderRadius: '14px',
+          padding: '10px 14px',
+          boxShadow: '0 6px 18px rgba(0,0,0,0.08)',
+          display: 'flex', alignItems: 'center', gap: '9px',
+          zIndex: 20,
+        }}
+      >
+        <span style={{ fontSize: '20px' }}>CA</span>
+        <div>
+          <p style={{ fontSize: '10px', color: '#64748b', fontWeight: 500 }}>Top Match</p>
+          <p style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Canada</p>
+        </div>
+      </motion.div>
+
+      {/* ── Bottom-right floating: Scholarship Eligible ── */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1, y: [0, -7, 0] }}
+        transition={{ opacity: { delay: 1.1 }, scale: { delay: 1.1 }, y: { repeat: Infinity, duration: 3.2, ease: 'easeInOut', delay: 0.8 } }}
+        style={{
+          position: 'absolute', bottom: '44px', right: '4px',
+          background: 'linear-gradient(135deg, #4f46e5, #2563eb)',
+          borderRadius: '12px',
+          padding: '9px 14px',
+          boxShadow: '0 6px 18px rgba(79,70,229,0.35)',
+          display: 'flex', alignItems: 'center', gap: '7px',
+          zIndex: 20,
+        }}
+      >
+        <span style={{ fontSize: '13px' }}>SC</span>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: '#fff' }}>Scholarship Eligible</span>
+      </motion.div>
+
+      {/* ── Background blurred orbs ── */}
+      <div style={{
+        position: 'absolute', top: '10%', left: '8%',
+        width: 180, height: 180,
+        background: 'radial-gradient(circle, rgba(37,99,235,0.1) 0%, transparent 70%)',
+        borderRadius: '50%', pointerEvents: 'none', filter: 'blur(20px)',
+      }} />
+      <div style={{
+        position: 'absolute', bottom: '8%', right: '5%',
+        width: 150, height: 150,
+        background: 'radial-gradient(circle, rgba(79,70,229,0.1) 0%, transparent 70%)',
+        borderRadius: '50%', pointerEvents: 'none', filter: 'blur(20px)',
+      }} />
+    </div>
+  );
+}
+
+
+
 /* ─── Hero ─────────────────────────────────────────── */
 function Hero() {
-  const [form, setForm] = useState({ name: '', email: '', phone: '', city: '' });
-  const [done, setDone] = useState(false);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setDone(true);
-  };
-
-  const fields = [
-    { key: 'name',  label: 'Full Name',     icon: Users,  placeholder: 'Enter your full name',      type: 'text'  },
-    { key: 'email', label: 'Email Address',  icon: Mail,   placeholder: 'your@email.com',            type: 'email' },
-    { key: 'phone', label: 'Phone Number',   icon: Phone,  placeholder: '+91 98765 43210',           type: 'tel'   },
-    { key: 'city',  label: 'City',           icon: MapPin, placeholder: 'Mumbai, Delhi, Bangalore…', type: 'text'  },
+  const problemSolutions = [
+    { icon: Zap,    text: 'Instant AI voice counseling eliminates wait times & student drop-offs' },
+    { icon: Target, text: 'Automates 60–70% of repetitive queries, freeing your counselors for high-value work' },
+    { icon: Users,  text: 'Collects structured data to qualify high-intent leads intelligently' },
   ];
 
   return (
     <section
-      className="gradient-hero-bg"
-      style={{ minHeight: '100vh', paddingTop: '80px', paddingBottom: '60px', position: 'relative', overflow: 'hidden' }}
+      style={{
+        background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #f5f3ff 100%)',
+        minHeight: '100vh',
+        paddingTop: '80px',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
     >
-      {/* Blobs */}
-      <div style={{ position: 'absolute', top: 80, right: 0, width: 400, height: 400, background: 'radial-gradient(circle, rgba(219,234,254,0.7) 0%, transparent 70%)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: 0, left: 0, width: 300, height: 300, background: 'radial-gradient(circle, rgba(239,246,255,0.8) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      {/* Background blurred gradient orbs */}
+      <div style={{ position: 'absolute', top: -40, right: -60, width: 500, height: 500, background: 'radial-gradient(circle, rgba(37,99,235,0.1) 0%, transparent 65%)', pointerEvents: 'none', filter: 'blur(40px)' }} />
+      <div style={{ position: 'absolute', bottom: -60, left: -40, width: 400, height: 400, background: 'radial-gradient(circle, rgba(79,70,229,0.1) 0%, transparent 65%)', pointerEvents: 'none', filter: 'blur(40px)' }} />
+      <div style={{ position: 'absolute', top: '40%', left: '35%', width: 300, height: 300, background: 'radial-gradient(circle, rgba(14,165,233,0.06) 0%, transparent 70%)', pointerEvents: 'none', filter: 'blur(30px)' }} />
 
       <div
         style={{
           maxWidth: '1280px',
           margin: '0 auto',
-          padding: '0 24px',
+          padding: '0 32px',
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
-          gap: '56px',
+          gap: '48px',
           alignItems: 'center',
-          minHeight: 'calc(100vh - 80px)',
+          paddingTop: '40px',
+          paddingBottom: '40px',
+          width: '100%',
         }}
       >
-        {/* ── Left copy ── */}
+        {/* ── LEFT: Primary Content ── */}
         <div>
+          {/* Badge */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
-              background: '#eff6ff',
-              border: '1px solid #bfdbfe',
+              background: 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(79,70,229,0.08))',
+              border: '1px solid rgba(37,99,235,0.2)',
               color: '#1d4ed8',
               fontSize: '12px',
               fontWeight: 600,
-              padding: '6px 14px',
+              padding: '7px 16px',
               borderRadius: '999px',
-              marginBottom: '24px',
+              marginBottom: '18px',
+              backdropFilter: 'blur(8px)',
             }}
           >
             <span style={{ width: 7, height: 7, background: '#2563eb', borderRadius: '50%', display: 'inline-block', animation: 'pulse 2s infinite' }} />
-            🤖 AI-Powered · Trusted by 40,000+ Students
+            AI Powered • Trusted by 45,000+ Students
           </motion.div>
 
+          {/* Main heading */}
           <motion.h1
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
             className="font-display"
-            style={{ fontSize: '58px', fontWeight: 800, lineHeight: 1.1, color: '#0f172a', marginBottom: '20px' }}
+            style={{ fontSize: '52px', fontWeight: 800, lineHeight: 1.1, color: '#0f172a', marginBottom: '14px' }}
           >
-            Your AI{' '}
-            <span className="gradient-text">Study Abroad</span>
+            Your{' '}
+            <span style={{
+              background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 60%, #7c3aed 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}>
+              AI Study Abroad
+            </span>
             <br />Counselor
           </motion.h1>
 
+          {/* Subtext */}
           <motion.p
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            style={{ fontSize: '17px', color: '#475569', lineHeight: 1.7, marginBottom: '32px', maxWidth: '480px' }}
+            style={{ fontSize: '15px', color: '#475569', lineHeight: 1.65, marginBottom: '22px', maxWidth: '460px' }}
           >
-            Get personalized university recommendations, readiness scores, and expert
-            guidance — all powered by AI. Free, instant, and available 24/7.
+            Automating student counseling with intelligent voice conversations — faster, smarter, and scalable.
           </motion.p>
 
+          {/* Problem-Solution Points */}
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '36px' }}
+            style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '26px' }}
           >
-            {[
-              'Personalized university shortlisting in minutes',
-              'AI readiness score & scholarship matching',
-              'Voice-first counseling experience',
-              'End-to-end application & visa support',
-            ].map((f) => (
-              <div key={f} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <CheckCircle2 size={13} color="#2563eb" />
-                </div>
-                <span style={{ fontSize: '14px', color: '#334155', fontWeight: 500 }}>{f}</span>
-              </div>
-            ))}
+            {problemSolutions.map((item, i) => {
+              const Icon = item.icon;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.35 + i * 0.1 }}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}
+                >
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #eff6ff, #e0e7ff)',
+                    border: '1px solid rgba(37,99,235,0.15)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    marginTop: '1px',
+                  }}>
+                    <Icon size={13} color="#2563eb" />
+                  </div>
+                  <span style={{ fontSize: '14px', color: '#334155', fontWeight: 500, lineHeight: 1.6 }}>{item.text}</span>
+                </motion.div>
+              );
+            })}
           </motion.div>
 
+          {/* CTA Buttons */}
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.5 }}
             style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}
           >
             <Link href="/onboarding" style={{ textDecoration: 'none' }}>
               <button
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.04)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 28px rgba(37,99,235,0.45)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 16px rgba(37,99,235,0.35)'; }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px',
-                  background: '#2563eb', color: '#ffffff', fontWeight: 600,
-                  padding: '14px 28px', borderRadius: '14px', border: 'none',
+                  background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
+                  color: '#ffffff', fontWeight: 700,
+                  padding: '15px 30px', borderRadius: '14px', border: 'none',
                   cursor: 'pointer', fontSize: '14px',
                   boxShadow: '0 4px 16px rgba(37,99,235,0.35)',
-                  transition: 'background 0.15s',
+                  transition: 'all 0.22s ease',
                 }}
               >
                 <Mic size={16} />
-                Start Free Consultation
+                Start AI Consultation
                 <ArrowRight size={15} />
               </button>
             </Link>
             <Link href="/dashboard" style={{ textDecoration: 'none' }}>
               <button
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.04)'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#2563eb'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#e2e8f0'; }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px',
-                  background: '#ffffff', color: '#0f172a', fontWeight: 600,
-                  padding: '14px 28px', borderRadius: '14px',
-                  border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '14px',
-                  transition: 'border-color 0.15s',
+                  background: 'rgba(255,255,255,0.85)', color: '#0f172a', fontWeight: 600,
+                  padding: '15px 30px', borderRadius: '14px',
+                  border: '1.5px solid #e2e8f0', cursor: 'pointer', fontSize: '14px',
+                  backdropFilter: 'blur(8px)',
+                  transition: 'all 0.22s ease',
                 }}
               >
                 <Play size={15} color="#2563eb" />
-                View Dashboard Demo
+                See How It Works
               </button>
             </Link>
           </motion.div>
@@ -203,8 +442,8 @@ function Hero() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.7 }}
-            style={{ marginTop: '32px', display: 'flex', alignItems: 'center', gap: '14px' }}
+            transition={{ delay: 0.75 }}
+            style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}
           >
             <div style={{ display: 'flex' }}>
               {['P', 'R', 'A', 'K'].map((l, i) => (
@@ -219,6 +458,7 @@ function Hero() {
                     marginLeft: i > 0 ? '-8px' : 0,
                     zIndex: 4 - i,
                     position: 'relative',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
                   }}
                 >
                   {l}
@@ -234,143 +474,19 @@ function Hero() {
           </motion.div>
         </div>
 
-        {/* ── Right form ── */}
+        {/* ── RIGHT: AI Visual Story ── */}
         <motion.div
-          initial={{ opacity: 0, x: 30 }}
+          initial={{ opacity: 0, x: 36 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.55, delay: 0.15 }}
-          style={{
-            background: '#ffffff',
-            borderRadius: '24px',
-            padding: '40px',
-            boxShadow: '0 24px 64px rgba(37,99,235,0.12), 0 4px 16px rgba(0,0,0,0.06)',
-            border: '1px solid #e2e8f0',
-          }}
+          transition={{ duration: 0.6, delay: 0.18 }}
         >
-          {done ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              style={{ textAlign: 'center', padding: '32px 0' }}
-            >
-              <div style={{ width: 64, height: 64, background: '#dcfce7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                <CheckCircle2 size={32} color="#16a34a" />
-              </div>
-              <h3 style={{ fontSize: '22px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>Application Received! 🎉</h3>
-              <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Your AI counselor is ready. Start your free consultation now.</p>
-              <Link href="/onboarding" style={{ textDecoration: 'none' }}>
-                <button style={{ background: '#2563eb', color: '#fff', fontWeight: 600, padding: '12px 32px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontSize: '14px' }}>
-                  Start AI Onboarding →
-                </button>
-              </Link>
-            </motion.div>
-          ) : (
-            <>
-              <div style={{ marginBottom: '28px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <div style={{ width: 28, height: 28, background: '#2563eb', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <GraduationCap size={15} color="#ffffff" />
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Free Consultation</span>
-                </div>
-                <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>
-                  Get Your Study Abroad Plan
-                </h2>
-                <p style={{ fontSize: '14px', color: '#64748b' }}>AI-matched universities + scholarship opportunities</p>
-              </div>
-
-              <form onSubmit={handleSubmit}>
-                {fields.map((f) => {
-                  const Icon = f.icon;
-                  return (
-                    <div key={f.key} style={{ marginBottom: '16px' }}>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                        {f.label}
-                      </label>
-                      {/* Flex-based input row — no absolute positioning */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          border: '1.5px solid #e2e8f0',
-                          borderRadius: '12px',
-                          padding: '11px 14px',
-                          background: '#ffffff',
-                          transition: 'border-color 0.15s',
-                        }}
-                      >
-                        <Icon size={15} color="#94a3b8" style={{ flexShrink: 0 }} />
-                        <input
-                          type={f.type}
-                          placeholder={f.placeholder}
-                          value={form[f.key as keyof typeof form]}
-                          onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                          required
-                          style={{
-                            flex: 1,
-                            border: 'none',
-                            outline: 'none',
-                            fontSize: '14px',
-                            color: '#0f172a',
-                            background: 'transparent',
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-
-                <button
-                  type="submit"
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    background: '#2563eb',
-                    color: '#ffffff',
-                    fontWeight: 700,
-                    padding: '14px 24px',
-                    borderRadius: '12px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    marginTop: '8px',
-                    boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
-                  }}
-                >
-                  Get Free AI Consultation
-                  <ArrowRight size={15} />
-                </button>
-              </form>
-
-              <p style={{ textAlign: 'center', fontSize: '12px', color: '#94a3b8', marginTop: '16px' }}>
-                🔒 100% free · No spam · Your data is secure
-              </p>
-
-              <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                {['🇬🇧 UK', '🇮🇪 Ireland', '🇨🇦 Canada', '🇺🇸 USA'].map(c => (
-                  <span
-                    key={c}
-                    style={{
-                      fontSize: '12px', fontWeight: 500, color: '#475569',
-                      background: '#f8fafc', border: '1px solid #e2e8f0',
-                      padding: '4px 12px', borderRadius: '999px',
-                    }}
-                  >
-                    {c}
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
+          <HeroVisual />
         </motion.div>
       </div>
     </section>
   );
 }
+
 
 /* ─── Stats Bar ─────────────────────────────────────── */
 function StatsBar() {
@@ -412,9 +528,9 @@ function HowItWorks() {
   const inView = useInView(ref, { once: true, margin: '-80px' });
 
   const steps = [
-    { num: '01', emoji: '🎙️', color: '#2563eb', bg: '#eff6ff', title: 'AI Voice Onboarding', desc: 'Have a natural conversation with our AI counselor. Share your background, goals, and budget in minutes.' },
-    { num: '02', emoji: '📊', color: '#7c3aed', bg: '#f5f3ff', title: 'Get Your Readiness Score', desc: 'Instantly receive a detailed readiness score with academic, financial, and clarity breakdowns.' },
-    { num: '03', emoji: '🎓', color: '#0891b2', bg: '#ecfeff', title: 'Apply with Expert Support', desc: 'Get matched universities, scholarship opportunities, SOP guidance, and complete visa support.' },
+    { num: '01', emoji: 'VO', color: '#2563eb', bg: '#eff6ff', title: 'AI Voice Onboarding', desc: 'Have a natural conversation with our AI counselor. Share your background, goals, and budget in minutes.' },
+    { num: '02', emoji: 'RS', color: '#7c3aed', bg: '#f5f3ff', title: 'Get Your Readiness Score', desc: 'Instantly receive a detailed readiness score with academic, financial, and clarity breakdowns.' },
+    { num: '03', emoji: 'AP', color: '#0891b2', bg: '#ecfeff', title: 'Apply with Expert Support', desc: 'Get matched universities, scholarship opportunities, SOP guidance, and complete visa support.' },
   ];
 
   return (

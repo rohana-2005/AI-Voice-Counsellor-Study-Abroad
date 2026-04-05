@@ -1,32 +1,32 @@
 'use client';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { GraduationCap, Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import { useAuthSession } from '@/components/auth/AuthSessionProvider';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { GraduationCap } from 'lucide-react';
 
 const navLinks = [
   { label: 'Home',         href: '/' },
-  { label: 'How it works', href: '/#how-it-works' },
+  { label: 'How It Works', href: '/#how-it-works' },
   { label: 'Countries',    href: '/#countries' },
-  { label: 'Testimonials', href: '/#testimonials' },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const { isAuthenticated } = useAuthSession();
+  const [signInError, setSignInError] = useState('');
 
-  const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+  const backendBaseUrl =
+    process.env.NEXT_PUBLIC_BACKEND_URL ??
+    process.env.NEXT_PUBLIC_PY_BACKEND_URL ??
+    'http://localhost:8000';
 
   const handleSignIn = async () => {
     if (isSigningIn) {
       return;
     }
 
+    setSignInError('');
     setIsSigningIn(true);
     try {
       const res = await fetch(
@@ -35,18 +35,22 @@ export default function Navbar() {
       );
 
       if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        setSignInError(detail || 'Sign-in failed. Backend is unreachable or returned an error.');
         setIsSigningIn(false);
         return;
       }
 
       const data = (await res.json()) as { url?: string };
       if (!data.url) {
+        setSignInError('Sign-in URL was not returned by backend.');
         setIsSigningIn(false);
         return;
       }
 
       window.location.href = data.url;
     } catch {
+      setSignInError('Cannot reach backend at http://localhost:8000. Start backend and try again.');
       setIsSigningIn(false);
     }
   };
@@ -56,6 +60,7 @@ export default function Navbar() {
       return;
     }
 
+    setSignInError('');
     setIsSigningIn(true);
     try {
       const res = await fetch(
@@ -64,28 +69,37 @@ export default function Navbar() {
       );
 
       if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        setSignInError(detail || 'Admin sign-in failed. Backend is unreachable or returned an error.');
         setIsSigningIn(false);
         return;
       }
 
       const data = (await res.json()) as { url?: string };
       if (!data.url) {
+        setSignInError('Admin sign-in URL was not returned by backend.');
         setIsSigningIn(false);
         return;
       }
 
       window.location.href = data.url;
     } catch {
+      setSignInError('Cannot reach backend at http://localhost:8000. Start backend and try again.');
       setIsSigningIn(false);
     }
   };
 
   // Hide on app pages
   if (
+    
     pathname?.startsWith('/dashboard') ||
+   
     pathname?.startsWith('/session') ||
+   
     pathname?.startsWith('/report') ||
     pathname?.startsWith('/admin')
+   ||
+    pathname?.startsWith('/onboarding')
   ) {
     return null;
   }
@@ -167,18 +181,38 @@ export default function Navbar() {
               {isSigningIn ? 'Redirecting...' : 'Sign In'}
             </button>
             <Link href="/onboarding" style={{ textDecoration: 'none' }}>
-              <button style={{
-                fontSize: '14px', fontWeight: 600, color: '#ffffff',
-                background: '#2563eb', border: 'none', cursor: 'pointer',
-                padding: '10px 20px', borderRadius: '12px',
-                boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
-                transition: 'background 0.15s',
-              }}>
-                Free Consultation
+              <button
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.04)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
+                style={{
+                  fontSize: '14px', fontWeight: 600, color: '#ffffff',
+                  background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
+                  border: 'none', cursor: 'pointer',
+                  padding: '10px 20px', borderRadius: '12px',
+                  boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
+                  transition: 'all 0.2s ease',
+                }}>
+                Start Free Consultation
               </button>
             </Link>
           </div>
         </div>
+        {signInError ? (
+          <div
+            style={{
+              color: '#b91c1c',
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: '10px',
+              padding: '8px 12px',
+              marginBottom: '12px',
+              fontSize: '13px',
+              fontWeight: 500,
+            }}
+          >
+            {signInError}
+          </div>
+        ) : null}
       </div>
     </motion.nav>
   );
