@@ -407,32 +407,52 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
   const StatusBadge = () => {
     if (status === 'connecting') {
       return (
-        <div className="flex items-center gap-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-semibold px-3 py-1.5 rounded-full">
-          <Loader2 className="w-3 h-3 animate-spin" />
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          background: '#fffbeb', border: '1px solid #fde68a',
+          color: '#b45309', fontSize: '11px', fontWeight: 600,
+          padding: '5px 12px', borderRadius: '999px',
+        }}>
+          <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
           Connecting…
         </div>
       );
     }
     if (status === 'connected') {
       return (
-        <div className="flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold px-3 py-1.5 rounded-full">
-          <Wifi className="w-3 h-3" />
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          background: '#f0fdf4', border: '1px solid #bbf7d0',
+          color: '#15803d', fontSize: '11px', fontWeight: 600,
+          padding: '5px 12px', borderRadius: '999px',
+        }}>
+          <Wifi style={{ width: 12, height: 12 }} />
           Live
         </div>
       );
     }
     if (status === 'error') {
       return (
-        <div className="flex items-center gap-1.5 bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-semibold px-3 py-1.5 rounded-full">
-          <WifiOff className="w-3 h-3" />
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          background: '#fef2f2', border: '1px solid #fecaca',
+          color: '#dc2626', fontSize: '11px', fontWeight: 600,
+          padding: '5px 12px', borderRadius: '999px',
+        }}>
+          <WifiOff style={{ width: 12, height: 12 }} />
           Error
         </div>
       );
     }
     if (status === 'ended') {
       return (
-        <div className="flex items-center gap-1.5 bg-slate-500/20 border border-slate-500/30 text-slate-400 text-xs font-semibold px-3 py-1.5 rounded-full">
-          <PhoneOff className="w-3 h-3" />
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          background: '#f1f5f9', border: '1px solid #e2e8f0',
+          color: '#64748b', fontSize: '11px', fontWeight: 600,
+          padding: '5px 12px', borderRadius: '999px',
+        }}>
+          <PhoneOff style={{ width: 12, height: 12 }} />
           Ended
         </div>
       );
@@ -443,31 +463,60 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ fontFamily: 'Inter, sans-serif', background: '#f8fafc' }}
+    >
 
       {/* ── Header ── */}
-      <header className="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-4 sm:px-6 py-3 flex-shrink-0 z-10">
-        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-3">
+      <header style={{
+        background: '#ffffff',
+        borderBottom: '1px solid #e2e8f0',
+        padding: '0 24px',
+        flexShrink: 0,
+        zIndex: 10,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+      }}>
+        <div style={{
+          maxWidth: 1600, margin: '0 auto',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 12, height: 60,
+        }}>
           {/* Logo */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/40">
-              <GraduationCap className="w-4 h-4 text-white" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36,
+              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              borderRadius: 10,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 10px rgba(37,99,235,0.25)',
+            }}>
+              <GraduationCap style={{ width: 18, height: 18, color: '#ffffff' }} />
             </div>
-            <span className="text-white font-bold text-sm tracking-tight">
-              StudyAbroad<span className="text-blue-400">.AI</span>
+            <span style={{ color: '#0f172a', fontWeight: 700, fontSize: 15, letterSpacing: '-0.3px' }}>
+              StudyAbroad<span style={{ color: '#2563eb' }}>.AI</span>
             </span>
           </div>
 
           {/* Status + End button */}
-          <div className="flex items-center gap-3">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <StatusBadge />
             <button
               id="end-session-btn"
               onClick={handleEndSession}
               disabled={status === 'ended' || status === 'connecting'}
-              className="text-xs font-semibold bg-red-600 hover:bg-red-700 disabled:bg-slate-700 disabled:text-slate-400 text-white px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+              style={{
+                fontSize: 12, fontWeight: 600,
+                background: status === 'ended' || status === 'connecting' ? '#f1f5f9' : '#dc2626',
+                color: status === 'ended' || status === 'connecting' ? '#94a3b8' : '#ffffff',
+                border: 'none',
+                padding: '8px 16px', borderRadius: 10,
+                display: 'flex', alignItems: 'center', gap: 6,
+                cursor: status === 'ended' || status === 'connecting' ? 'not-allowed' : 'pointer',
+                transition: 'background 0.15s',
+              }}
             >
-              <PhoneOff className="w-3.5 h-3.5" />
+              <PhoneOff style={{ width: 13, height: 13 }} />
               End Session
             </button>
           </div>
@@ -475,34 +524,66 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
       </header>
 
       {/* ── Main Layout ── */}
-      <div className="flex-1 max-w-[1600px] mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 flex flex-col xl:flex-row gap-4 sm:gap-6 min-h-0 overflow-hidden">
+      <div
+        className="flex-1 flex flex-col xl:flex-row gap-5 min-h-0 overflow-hidden"
+        style={{
+          maxWidth: 1600, margin: '0 auto', width: '100%',
+          padding: '20px 24px',
+        }}
+      >
 
         {/* ── Left: Avatar Video ── */}
         <div className="w-full xl:w-[340px] xl:flex-shrink-0 flex flex-col gap-4">
 
           {/* Video container */}
-          <div className="relative w-full aspect-[3/4] bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl shadow-black/40">
+          <div style={{
+            position: 'relative', width: '100%', aspectRatio: '3/4',
+            background: '#e2e8f0', borderRadius: 20, overflow: 'hidden',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+          }}>
             {/* Loading overlay */}
             {status === 'connecting' && (
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900 gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
-                  <Loader2 className="w-7 h-7 text-blue-400 animate-spin" />
+              <div style={{
+                position: 'absolute', inset: 0, zIndex: 10,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                background: '#f8fafc', gap: 12,
+              }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: 16,
+                  background: '#eff6ff', border: '1px solid #bfdbfe',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Loader2 style={{ width: 26, height: 26, color: '#2563eb', animation: 'spin 1s linear infinite' }} />
                 </div>
-                <p className="text-slate-400 text-sm font-medium">Connecting to AI…</p>
+                <p style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Connecting to AI…</p>
               </div>
             )}
 
             {/* Error overlay */}
             {status === 'error' && (
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900 gap-3 px-6 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-red-600/20 border border-red-500/30 flex items-center justify-center">
-                  <AlertCircle className="w-7 h-7 text-red-400" />
+              <div style={{
+                position: 'absolute', inset: 0, zIndex: 10,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                background: '#f8fafc', gap: 12, padding: '0 24px', textAlign: 'center',
+              }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: 16,
+                  background: '#fef2f2', border: '1px solid #fecaca',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <AlertCircle style={{ width: 26, height: 26, color: '#dc2626' }} />
                 </div>
-                <p className="text-red-400 text-sm font-semibold">Connection Failed</p>
-                {errorMsg && <p className="text-slate-500 text-xs leading-relaxed">{errorMsg}</p>}
+                <p style={{ color: '#dc2626', fontSize: 13, fontWeight: 600 }}>Connection Failed</p>
+                {errorMsg && <p style={{ color: '#94a3b8', fontSize: 11, lineHeight: 1.6 }}>{errorMsg}</p>}
                 <button
                   onClick={() => { setStatus('idle'); startSession(); }}
-                  className="mt-1 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition-colors"
+                  style={{
+                    marginTop: 4, fontSize: 12, fontWeight: 600,
+                    background: '#2563eb', color: '#ffffff',
+                    border: 'none', borderRadius: 10,
+                    padding: '8px 18px', cursor: 'pointer',
+                  }}
                 >
                   Retry
                 </button>
@@ -519,34 +600,55 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
 
             {/* Live pulse indicator */}
             {status === 'connected' && (
-              <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/50 backdrop-blur-sm rounded-full px-2.5 py-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-white text-[10px] font-semibold uppercase tracking-wider">Live</span>
+              <div style={{
+                position: 'absolute', top: 12, left: 12,
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
+                borderRadius: 999, padding: '4px 10px',
+              }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: '#ef4444', display: 'inline-block',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                }} />
+                <span style={{ color: '#ffffff', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Live</span>
               </div>
             )}
           </div>
 
           {/* Session stats card */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Session Info</p>
+          <div style={{
+            background: '#ffffff', border: '1px solid #e2e8f0',
+            borderRadius: 16, padding: '16px 20px',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+          }}>
+            <p style={{ color: '#94a3b8', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Session Info</p>
             {[
               { label: 'AI Counselor', value: 'StudyAbroad AI', icon: '🤖' },
               { label: 'Messages', value: messages.length.toString(), icon: '💬' },
               { label: 'Status', value: status === 'connected' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1), icon: '📡' },
             ].map((s) => (
-              <div key={s.label} className="flex items-center justify-between">
-                <span className="text-slate-500 text-xs">{s.icon} {s.label}</span>
-                <span className="text-slate-200 text-xs font-semibold">{s.value}</span>
+              <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ color: '#64748b', fontSize: 12 }}>{s.icon} {s.label}</span>
+                <span style={{ color: '#0f172a', fontSize: 12, fontWeight: 600 }}>{s.value}</span>
               </div>
             ))}
 
-            <div className="pt-2 border-t border-slate-800 mt-2 space-y-2">
+            <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 8, paddingTop: 12 }}>
               <button
                 onClick={handlePhoneCall}
                 disabled={isCalling}
-                className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-slate-300 font-semibold text-xs py-2.5 rounded-xl border border-slate-700 transition"
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  background: '#eff6ff', border: '1px solid #bfdbfe',
+                  color: '#1d4ed8', fontWeight: 600, fontSize: 12,
+                  padding: '10px 16px', borderRadius: 10,
+                  cursor: isCalling ? 'not-allowed' : 'pointer',
+                  opacity: isCalling ? 0.6 : 1,
+                  transition: 'background 0.15s',
+                }}
               >
-                <PhoneOff className="w-3.5 h-3.5 text-blue-400" />
+                <PhoneOff style={{ width: 13, height: 13, color: '#2563eb' }} />
                 {isCalling ? 'Calling...' : 'Connect via Phone Call'}
               </button>
             </div>
@@ -554,16 +656,36 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
         </div>
 
         {/* ── Right: Chat panel ── */}
-        <div className="flex-1 min-w-0 flex flex-col bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden min-h-0" style={{ maxHeight: 'calc(100vh - 96px)' }}>
+        <div
+          className="flex-1 min-w-0 flex flex-col overflow-hidden min-h-0"
+          style={{
+            background: '#ffffff', borderRadius: 20,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+            maxHeight: 'calc(100vh - 96px)',
+          }}
+        >
 
           {/* Chat header */}
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800 flex-shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-900/30 flex-shrink-0">
-              <span className="text-base leading-none">🤖</span>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '16px 20px', borderBottom: '1px solid #f1f5f9',
+            flexShrink: 0,
+          }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 12,
+              background: 'linear-gradient(135deg, #2563eb, #4338ca)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, boxShadow: '0 4px 10px rgba(37,99,235,0.2)',
+            }}>
+              <span style={{ fontSize: 16, lineHeight: 1 }}>🤖</span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white">AI Counselor</p>
-              <p className={`text-xs font-medium ${status === 'connected' ? 'text-emerald-400' : 'text-slate-500'}`}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>AI Counselor</p>
+              <p style={{
+                fontSize: 12, fontWeight: 500, margin: 0, marginTop: 2,
+                color: status === 'connected' ? '#15803d' : '#94a3b8',
+              }}>
                 {status === 'connected'
                   ? '● Live conversation'
                   : status === 'connecting'
@@ -575,11 +697,17 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                   : 'Starting…'}
               </p>
             </div>
-            <div className="text-xs text-slate-600 font-mono">{messages.length} msgs</div>
+            <div style={{ fontSize: 11, color: '#cbd5e1', fontFamily: 'monospace' }}>{messages.length} msgs</div>
           </div>
 
           {(savedSessionId || saveErrorMsg) && (
-            <div className={`px-5 py-2 border-b text-[11px] font-medium ${savedSessionId ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-300'}`}>
+            <div style={{
+              padding: '8px 20px', borderBottom: '1px solid',
+              fontSize: 11, fontWeight: 500,
+              borderColor: savedSessionId ? '#bbf7d0' : '#fecaca',
+              background: savedSessionId ? '#f0fdf4' : '#fef2f2',
+              color: savedSessionId ? '#15803d' : '#dc2626',
+            }}>
               {savedSessionId
                 ? `Saved Session ID: ${savedSessionId}`
                 : `Save failed: ${saveErrorMsg}`}
@@ -587,16 +715,24 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
           )}
 
           {/* Messages area */}
-          <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-5 space-y-3">
+          <div className="flex-1 overflow-y-auto" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Empty state */}
             {messages.length === 0 && status !== 'error' && (
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-                <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center">
-                  <span className="text-3xl">🎓</span>
+              <div style={{
+                flex: 1, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                gap: 12, textAlign: 'center', padding: '48px 0',
+              }}>
+                <div style={{
+                  width: 64, height: 64, borderRadius: 18,
+                  background: '#eff6ff', border: '1px solid #bfdbfe',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <span style={{ fontSize: 28 }}>🎓</span>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm font-semibold">Session starting…</p>
-                  <p className="text-slate-600 text-xs mt-1">Your AI counselor will greet you shortly.</p>
+                  <p style={{ color: '#475569', fontSize: 14, fontWeight: 600, margin: 0 }}>Session starting…</p>
+                  <p style={{ color: '#94a3b8', fontSize: 12, marginTop: 4 }}>Your AI counselor will greet you shortly.</p>
                 </div>
               </div>
             )}
@@ -612,34 +748,46 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                   className={`flex gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                 >
                   {/* Avatar icon */}
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${
-                      msg.role === 'ai'
-                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
-                        : 'bg-gradient-to-br from-slate-600 to-slate-700 text-slate-200'
-                    }`}
-                  >
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 2,
+                    background: msg.role === 'ai'
+                      ? 'linear-gradient(135deg, #2563eb, #4338ca)'
+                      : 'linear-gradient(135deg, #e2e8f0, #cbd5e1)',
+                    color: msg.role === 'ai' ? '#ffffff' : '#475569',
+                  }}>
                     {msg.role === 'ai' ? '🤖' : 'U'}
                   </div>
 
                   {/* Bubble */}
                   <div className={`max-w-[78%] group ${msg.role === 'user' ? 'items-end flex flex-col' : ''}`}>
-                    <div
-                      className={`px-4 py-3 rounded-2xl text-sm leading-relaxed relative ${
-                        msg.role === 'ai'
-                          ? 'bg-slate-800 text-slate-100 rounded-tl-sm border border-slate-700/60'
-                          : 'bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-tr-sm shadow-lg shadow-blue-900/30'
-                      }`}
-                    >
+                    <div style={{
+                      padding: '10px 16px',
+                      borderRadius: msg.role === 'ai' ? '18px 18px 18px 4px' : '18px 18px 4px 18px',
+                      fontSize: 13, lineHeight: 1.6, position: 'relative',
+                      background: msg.role === 'ai' ? '#f8fafc' : 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                      color: msg.role === 'ai' ? '#1e293b' : '#ffffff',
+                      border: msg.role === 'ai' ? '1px solid #e2e8f0' : 'none',
+                      boxShadow: msg.role === 'user' ? '0 2px 8px rgba(37,99,235,0.2)' : 'none',
+                    }}>
                       {msg.text}
                       {/* Streaming cursor */}
                       {msg.isStreaming && (
-                        <span className="inline-block w-1 h-4 bg-current ml-0.5 align-middle animate-pulse rounded-sm opacity-70" />
+                        <span style={{
+                          display: 'inline-block', width: 3, height: 14,
+                          background: 'currentColor', marginLeft: 2, verticalAlign: 'middle',
+                          borderRadius: 2, opacity: 0.7,
+                          animation: 'pulse 1s ease-in-out infinite',
+                        }} />
                       )}
                     </div>
-                    <p className={`text-[10px] mt-1 px-1 ${msg.role === 'ai' ? 'text-slate-600' : 'text-blue-400/60'}`}>
+                    <p style={{
+                      fontSize: 10, marginTop: 4, paddingLeft: 4,
+                      color: msg.role === 'ai' ? '#cbd5e1' : '#93c5fd',
+                    }}>
                       {msg.timestamp}
-                      {msg.isStreaming && <span className="ml-1 text-blue-400 animate-pulse">● streaming</span>}
+                      {msg.isStreaming && <span style={{ marginLeft: 4, color: '#3b82f6', animation: 'pulse 1s ease-in-out infinite' }}>● streaming</span>}
                     </p>
                   </div>
                 </motion.div>
@@ -650,35 +798,61 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
           </div>
 
           {/* ── Input area ── */}
-          <div className="px-4 sm:px-5 py-4 border-t border-slate-800 bg-slate-900/90 backdrop-blur flex-shrink-0">
+          <div style={{
+            padding: '14px 20px', borderTop: '1px solid #f1f5f9',
+            background: '#ffffff', flexShrink: 0,
+          }}>
             {/* Session ended banner */}
             {status === 'ended' && (
-              <div className="mb-3 flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5">
-                <PhoneOff className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                <p className="text-slate-400 text-xs font-medium">Session ended. Transcript has been saved.</p>
+              <div style={{
+                marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
+                background: '#f8fafc', border: '1px solid #e2e8f0',
+                borderRadius: 10, padding: '10px 14px',
+              }}>
+                <PhoneOff style={{ width: 14, height: 14, color: '#94a3b8', flexShrink: 0 }} />
+                <p style={{ color: '#64748b', fontSize: 12, fontWeight: 500, margin: 0 }}>Session ended. Transcript has been saved.</p>
               </div>
             )}
 
-            <div className="flex items-center gap-2.5">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {/* Mic button */}
               <button
                 id="mic-toggle-btn"
                 onClick={handleMuteToggle}
                 disabled={status !== 'connected'}
                 title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-                className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all flex-shrink-0 ${
-                  status !== 'connected'
-                    ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                style={{
+                  width: 44, height: 44, borderRadius: 12, border: '1px solid',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, cursor: status !== 'connected' ? 'not-allowed' : 'pointer',
+                  background: status !== 'connected'
+                    ? '#f1f5f9'
                     : isMuted
-                    ? 'bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30'
-                    : 'bg-blue-600/20 border border-blue-500/40 text-blue-400 hover:bg-blue-600/30'
-                }`}
+                    ? '#fef2f2'
+                    : '#eff6ff',
+                  borderColor: status !== 'connected'
+                    ? '#e2e8f0'
+                    : isMuted
+                    ? '#fecaca'
+                    : '#bfdbfe',
+                  color: status !== 'connected'
+                    ? '#cbd5e1'
+                    : isMuted
+                    ? '#dc2626'
+                    : '#2563eb',
+                  transition: 'all 0.15s',
+                }}
               >
-                {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                {isMuted ? <MicOff style={{ width: 18, height: 18 }} /> : <Mic style={{ width: 18, height: 18 }} />}
               </button>
 
               {/* Text input */}
-              <div className="flex-1 flex items-center gap-2 bg-slate-800 border border-slate-700 focus-within:border-blue-500/60 focus-within:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] rounded-2xl px-4 py-3 transition-all">
+              <div style={{
+                flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+                background: '#f8fafc', border: '1px solid #e2e8f0',
+                borderRadius: 12, padding: '10px 16px',
+                transition: 'border-color 0.15s, box-shadow 0.15s',
+              }}>
                 <input
                   id="chat-input"
                   ref={inputRef}
@@ -694,7 +868,11 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                       : 'Waiting for connection…'
                   }
                   disabled={status !== 'connected'}
-                  className="flex-1 text-sm text-slate-200 placeholder-slate-600 focus:outline-none bg-transparent disabled:cursor-not-allowed"
+                  style={{
+                    flex: 1, fontSize: 13, color: '#0f172a',
+                    background: 'transparent', border: 'none', outline: 'none',
+                    cursor: status !== 'connected' ? 'not-allowed' : 'text',
+                  }}
                 />
               </div>
 
@@ -704,16 +882,28 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                 onClick={handleSend}
                 disabled={!input.trim() || status !== 'connected'}
                 title="Send message"
-                className="w-12 h-12 rounded-2xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white flex items-center justify-center transition-all flex-shrink-0 shadow-lg shadow-blue-900/30 disabled:shadow-none"
+                style={{
+                  width: 44, height: 44, borderRadius: 12, border: 'none',
+                  background: !input.trim() || status !== 'connected' ? '#f1f5f9' : '#2563eb',
+                  color: !input.trim() || status !== 'connected' ? '#cbd5e1' : '#ffffff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, cursor: !input.trim() || status !== 'connected' ? 'not-allowed' : 'pointer',
+                  boxShadow: !input.trim() || status !== 'connected' ? 'none' : '0 4px 12px rgba(37,99,235,0.25)',
+                  transition: 'all 0.15s',
+                }}
               >
-                <Send className="w-5 h-5" />
+                <Send style={{ width: 18, height: 18 }} />
               </button>
             </div>
 
             {/* Muted hint */}
             {isMuted && status === 'connected' && (
-              <p className="text-center text-xs text-red-400/80 font-medium mt-2 flex items-center justify-center gap-1.5">
-                <MicOff className="w-3 h-3" />
+              <p style={{
+                textAlign: 'center', fontSize: 11, color: '#dc2626',
+                fontWeight: 500, marginTop: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}>
+                <MicOff style={{ width: 11, height: 11 }} />
                 Microphone muted — your voice won&apos;t be captured
               </p>
             )}

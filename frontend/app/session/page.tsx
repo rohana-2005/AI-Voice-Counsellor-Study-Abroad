@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Avatar from '@/components/Avatar';
 import { useAuthSession } from '@/components/auth/AuthSessionProvider';
+import { GraduationCap, Mic, Phone } from 'lucide-react';
 
 /**
  * Session Page
@@ -57,64 +58,149 @@ export default function SessionPage() {
       <div
         style={{
           minHeight: '100vh',
-          background: '#0f172a',
+          background: '#f8fafc',
           display: 'grid',
           placeItems: 'center',
           padding: '32px',
+          fontFamily: 'Inter, sans-serif',
         }}
       >
+        {/* Card */}
         <div
           style={{
-            maxWidth: '480px',
+            maxWidth: 480,
             width: '100%',
-            background: '#111827',
-            border: '1px solid #1f2937',
-            borderRadius: '20px',
-            padding: '28px',
-            color: '#e2e8f0',
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 20,
+            padding: '32px 28px',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.07)',
             textAlign: 'center',
           }}
         >
-          <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '8px' }}>Start Live Avatar Session</h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '20px' }}>
-            The Anam avatar is paused. Click below to start the live session when you are ready.
-          </p>
-          <button
-            onClick={() => setIsAvatarEnabled(true)}
+          {/* Icon */}
+          <div
             style={{
-              background: '#2563eb',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '12px',
-              padding: '12px 18px',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer',
+              width: 64,
+              height: 64,
+              borderRadius: 18,
+              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              boxShadow: '0 8px 20px rgba(37,99,235,0.25)',
             }}
           >
+            <GraduationCap style={{ width: 28, height: 28, color: '#ffffff' }} />
+          </div>
+
+          <h1
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              color: '#0f172a',
+              marginBottom: 8,
+              letterSpacing: '-0.3px',
+            }}
+          >
+            Start Live Avatar Session
+          </h1>
+          <p
+            style={{
+              fontSize: 13,
+              color: '#64748b',
+              marginBottom: 24,
+              lineHeight: 1.6,
+            }}
+          >
+            The Anam avatar is paused. Click below to start the live session
+            when you are ready.
+          </p>
+
+          {/* Enable Avatar */}
+          <button
+            id="enable-avatar-btn"
+            onClick={() => setIsAvatarEnabled(true)}
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 12,
+              padding: '13px 20px',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
+              transition: 'opacity 0.15s',
+            }}
+          >
+            <Mic style={{ width: 16, height: 16 }} />
             Enable Avatar
           </button>
+
+          {/* Divider */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              margin: '16px 0 14px',
+            }}
+          >
+            <div style={{ flex: 1, height: 1, background: '#f1f5f9' }} />
+            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>or</span>
+            <div style={{ flex: 1, height: 1, background: '#f1f5f9' }} />
+          </div>
+
+          {/* Connect via Call */}
           <button
+            id="connect-via-call-btn"
             onClick={handleConnectViaCall}
             disabled={isCalling}
             style={{
-              marginTop: '10px',
-              background: '#1f2937',
-              color: '#ffffff',
-              border: '1px solid #334155',
-              borderRadius: '12px',
-              padding: '12px 18px',
-              fontSize: '14px',
+              width: '100%',
+              background: '#f8fafc',
+              color: '#1d4ed8',
+              border: '1px solid #bfdbfe',
+              borderRadius: 12,
+              padding: '12px 20px',
+              fontSize: 14,
               fontWeight: 600,
               cursor: isCalling ? 'not-allowed' : 'pointer',
-              width: '100%',
-              opacity: isCalling ? 0.7 : 1,
+              opacity: isCalling ? 0.65 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              transition: 'background 0.15s, opacity 0.15s',
             }}
           >
+            <Phone style={{ width: 14, height: 14 }} />
             {isCalling ? 'Calling...' : 'Connect Via Call (No Avatar)'}
           </button>
+
+          {/* Call message feedback */}
           {callMsg ? (
-            <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>{callMsg}</p>
+            <p
+              style={{
+                fontSize: 12,
+                color: callMsg.startsWith('Call failed') ? '#dc2626' : '#15803d',
+                background: callMsg.startsWith('Call failed') ? '#fef2f2' : '#f0fdf4',
+                border: `1px solid ${callMsg.startsWith('Call failed') ? '#fecaca' : '#bbf7d0'}`,
+                borderRadius: 8,
+                padding: '8px 12px',
+                marginTop: 14,
+                lineHeight: 1.5,
+              }}
+            >
+              {callMsg}
+            </p>
           ) : null}
         </div>
       </div>
