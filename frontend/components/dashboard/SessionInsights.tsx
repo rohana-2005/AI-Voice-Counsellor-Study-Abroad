@@ -5,15 +5,15 @@ import { recentSessions } from '@/lib/mockData';
 import Link from 'next/link';
 
 const sentimentCfg = {
-  positive: { bg: '#f0fdf4', text: '#15803d', emoji: '😊', label: 'Positive' },
-  neutral:  { bg: '#fffbeb', text: '#b45309', emoji: '😐', label: 'Neutral'  },
-  negative: { bg: '#fef2f2', text: '#dc2626', emoji: '😔', label: 'Negative' },
+  positive: { bg: '#f0fdf4', text: '#15803d', emoji: '', label: 'Positive' },
+  neutral:  { bg: '#fffbeb', text: '#b45309', emoji: '', label: 'Neutral'  },
+  negative: { bg: '#fef2f2', text: '#dc2626', emoji: '', label: 'Negative' },
 };
 
 const clsCfg = {
-  Hot:  { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', emoji: '🔥' },
-  Warm: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', emoji: '🌡️' },
-  Cold: { bg: '#eef2ff', text: '#4338ca', border: '#c7d2fe', emoji: '❄️' },
+  Hot:  { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', emoji: '' },
+  Warm: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', emoji: '' },
+  Cold: { bg: '#eef2ff', text: '#4338ca', border: '#c7d2fe', emoji: '' },
 };
 
 export default function SessionInsights() {
@@ -40,7 +40,7 @@ export default function SessionInsights() {
             <MessageSquare size={18} color="#2563eb" />
           </div>
           <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>📞 Session Insights</h3>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>Session Insights</h3>
             <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Recent AI counseling sessions</p>
           </div>
         </div>

@@ -224,7 +224,7 @@ function HeroVisual() {
           zIndex: 20,
         }}
       >
-        <span style={{ fontSize: '20px' }}>🇨🇦</span>
+        <span style={{ fontSize: '20px' }}>CA</span>
         <div>
           <p style={{ fontSize: '10px', color: '#64748b', fontWeight: 500 }}>Top Match</p>
           <p style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>Canada</p>
@@ -246,7 +246,7 @@ function HeroVisual() {
           zIndex: 20,
         }}
       >
-        <span style={{ fontSize: '13px' }}>🎓</span>
+        <span style={{ fontSize: '13px' }}>SC</span>
         <span style={{ fontSize: '11px', fontWeight: 700, color: '#fff' }}>Scholarship Eligible</span>
       </motion.div>
 
@@ -528,9 +528,9 @@ function HowItWorks() {
   const inView = useInView(ref, { once: true, margin: '-80px' });
 
   const steps = [
-    { num: '01', emoji: '🎙️', color: '#2563eb', bg: '#eff6ff', title: 'AI Voice Onboarding', desc: 'Have a natural conversation with our AI counselor. Share your background, goals, and budget in minutes.' },
-    { num: '02', emoji: '📊', color: '#7c3aed', bg: '#f5f3ff', title: 'Get Your Readiness Score', desc: 'Instantly receive a detailed readiness score with academic, financial, and clarity breakdowns.' },
-    { num: '03', emoji: '🎓', color: '#0891b2', bg: '#ecfeff', title: 'Apply with Expert Support', desc: 'Get matched universities, scholarship opportunities, SOP guidance, and complete visa support.' },
+    { num: '01', emoji: 'VO', color: '#2563eb', bg: '#eff6ff', title: 'AI Voice Onboarding', desc: 'Have a natural conversation with our AI counselor. Share your background, goals, and budget in minutes.' },
+    { num: '02', emoji: 'RS', color: '#7c3aed', bg: '#f5f3ff', title: 'Get Your Readiness Score', desc: 'Instantly receive a detailed readiness score with academic, financial, and clarity breakdowns.' },
+    { num: '03', emoji: 'AP', color: '#0891b2', bg: '#ecfeff', title: 'Apply with Expert Support', desc: 'Get matched universities, scholarship opportunities, SOP guidance, and complete visa support.' },
   ];
 
   return (

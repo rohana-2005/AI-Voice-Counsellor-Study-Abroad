@@ -26,7 +26,9 @@ type CallLogEntry = {
 const STRUCTURED_JSON_WAIT_MS = 5 * 60 * 1000;
 const STRUCTURED_JSON_POLL_MS = 5000;
 
-const aiGreeting = "Hello! I'm your AI Study Abroad Counselor. I'm here to help you find the perfect university and course abroad. This will take just 2–3 minutes. Ready to start? 🎓";
+const aiGreeting = "Hello! I'm your AI Study Abroad Counselor. I'm here to help you find the perfect university and course abroad. This will take just 2–3 minutes. Ready to start?";
+
+const stripEmoji = (value: string) => value.replace(/\p{Extended_Pictographic}/gu, '').trim();
 
 const isBenignEndedError = (error: unknown) => {
   if (!error) return false;
@@ -362,7 +364,7 @@ export default function OnboardingPage() {
     const nextStep = step + 1;
 
     if (nextStep >= onboardingQuestions.length) {
-      await addAIMessage("Perfect! 🎉 I've collected all the information I need. Let me analyze your profile and prepare your personalized study abroad plan...");
+      await addAIMessage("Perfect! I've collected all the information I need. Let me analyze your profile and prepare your personalized study abroad plan...");
       setTimeout(() => {
         setCompleted(true);
       }, 2000);
@@ -492,7 +494,7 @@ export default function OnboardingPage() {
             <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner border border-green-100">
               <CheckCircle2 className="w-12 h-12 text-green-500" />
             </div>
-            <h2 className="text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">Profile Configured 🎉</h2>
+            <h2 className="text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">Profile Configured</h2>
             <p className="text-slate-500 text-lg mb-10 font-medium">Your AI counselor has optimized your readiness plan.</p>
             
             <div className="grid grid-cols-2 gap-6 mb-10">
@@ -503,7 +505,7 @@ export default function OnboardingPage() {
               <div className="bg-rose-50/50 border border-rose-100 rounded-3xl p-6 transition-transform hover:-translate-y-1">
                 <p className="text-xs text-rose-400 uppercase tracking-widest mb-2 font-bold">Classification</p>
                 <p className="text-3xl font-black text-rose-600 tracking-tight flex items-center justify-center gap-2">
-                  <span>🔥</span> Hot
+                  Hot
                 </p>
               </div>
             </div>
@@ -576,7 +578,7 @@ export default function OnboardingPage() {
                   >
                     <ChatBubble
                       role={msg.role}
-                      message={msg.message.replace(/🎓|🤖|🎉|🔥/g, '')}
+                      message={stripEmoji(msg.message)}
                       timestamp={msg.timestamp}
                     />
                   </motion.div>
@@ -632,7 +634,7 @@ export default function OnboardingPage() {
                           {voiceStatus === 'connecting' ? 'Establishing secure connection...' : null}
                           {isListening ? 'Listening...' : null}
                           {isSavingProfile ? 'Synchronizing profile...' : null}
-                          {(!isSavingProfile && !isListening && !voiceStatus) && persistNotice ? persistNotice.replace(/🎓|🤖|🎉|🔥/g, '') : null}
+                          {(!isSavingProfile && !isListening && !voiceStatus) && persistNotice ? stripEmoji(persistNotice) : null}
                           {voiceError ? voiceError : null}
                         </span>
                       </div>
@@ -689,7 +691,7 @@ export default function OnboardingPage() {
                     <details className="group border border-slate-200 bg-white rounded-xl overflow-hidden shadow-sm transition-all open:bg-slate-50 open:border-slate-300">
                       <summary className="cursor-pointer px-5 py-3 text-xs font-bold tracking-widest uppercase text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors flex items-center justify-between outline-none select-none">
                         <span className="flex items-center gap-2">
-                          <span>🛠 Advanced Logs</span>
+                          <span>Advanced Logs</span>
                           {(persistMeta?.studentId || persistMeta?.callSessionId) && (
                             <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-md leading-none border border-emerald-200">Sync Configured</span>
                           )}

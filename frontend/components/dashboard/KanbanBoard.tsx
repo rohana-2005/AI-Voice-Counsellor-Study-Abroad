@@ -34,7 +34,7 @@ export default function KanbanBoard() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>📋 Journey Tracker</h3>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>Journey Tracker</h3>
           <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Track your study abroad application steps</p>
         </div>
         <button style={{

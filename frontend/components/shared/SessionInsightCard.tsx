@@ -15,15 +15,15 @@ interface SessionInsightCardProps {
 }
 
 const classificationConfig = {
-  Hot: { bg: 'badge-hot', dot: 'bg-red-400', emoji: '🔥' },
-  Warm: { bg: 'badge-warm', dot: 'bg-amber-400', emoji: '🌡️' },
-  Cold: { bg: 'badge-cold', dot: 'bg-indigo-400', emoji: '❄️' },
+  Hot: { bg: 'badge-hot', dot: 'bg-red-400', emoji: '' },
+  Warm: { bg: 'badge-warm', dot: 'bg-amber-400', emoji: '' },
+  Cold: { bg: 'badge-cold', dot: 'bg-indigo-400', emoji: '' },
 };
 
 const sentimentConfig = {
-  positive: { color: 'text-green-600', bg: 'bg-green-50', label: 'Positive', emoji: '😊' },
-  neutral: { color: 'text-amber-600', bg: 'bg-amber-50', label: 'Neutral', emoji: '😐' },
-  negative: { color: 'text-red-600', bg: 'bg-red-50', label: 'Negative', emoji: '😔' },
+  positive: { color: 'text-green-600', bg: 'bg-green-50', label: 'Positive', emoji: '' },
+  neutral: { color: 'text-amber-600', bg: 'bg-amber-50', label: 'Neutral', emoji: '' },
+  negative: { color: 'text-red-600', bg: 'bg-red-50', label: 'Negative', emoji: '' },
 };
 
 export default function SessionInsightCard({

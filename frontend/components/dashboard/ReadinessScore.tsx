@@ -10,9 +10,9 @@ const breakdown = [
 ];
 
 const clsCfg = {
-  Hot:  { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', emoji: '🔥' },
-  Warm: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', emoji: '🌡️' },
-  Cold: { bg: '#eef2ff', text: '#4338ca', border: '#c7d2fe', emoji: '❄️' },
+  Hot:  { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', emoji: '' },
+  Warm: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', emoji: '' },
+  Cold: { bg: '#eef2ff', text: '#4338ca', border: '#c7d2fe', emoji: '' },
 };
 
 export default function ReadinessScore() {
@@ -93,7 +93,7 @@ export default function ReadinessScore() {
         background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '14px',
       }}>
         <p style={{ fontSize: '13px', color: '#1d4ed8', lineHeight: 1.6, margin: 0 }}>
-          <span style={{ fontWeight: 700 }}>💡 AI Insight: </span>
+          <span style={{ fontWeight: 700 }}>AI Insight: </span>
           {callSession.insight_text}
         </p>
       </div>

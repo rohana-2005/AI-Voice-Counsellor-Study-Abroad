@@ -20,19 +20,19 @@ export default function ReportPage() {
   };
 
   const timelineSteps = [
-    { label: 'Profile Assessment', status: 'done', date: 'Mar 2026', icon: '✅' },
-    { label: 'AI Counseling Session', status: 'done', date: 'Apr 2026', icon: '✅' },
-    { label: 'IELTS Examination', status: 'current', date: 'May 2026', icon: '📝' },
-    { label: 'University Applications', status: 'pending', date: 'Jun 2026', icon: '🎓' },
-    { label: 'Offer Letters', status: 'pending', date: 'Aug 2026', icon: '📋' },
-    { label: 'Visa Application', status: 'pending', date: 'Sep 2026', icon: '✈️' },
-    { label: 'University Enrollment', status: 'pending', date: 'Sep 2026', icon: '🏛️' },
+    { label: 'Profile Assessment', status: 'done', date: 'Mar 2026', icon: 'Done' },
+    { label: 'AI Counseling Session', status: 'done', date: 'Apr 2026', icon: 'Done' },
+    { label: 'IELTS Examination', status: 'current', date: 'May 2026', icon: 'Now' },
+    { label: 'University Applications', status: 'pending', date: 'Jun 2026', icon: 'Next' },
+    { label: 'Offer Letters', status: 'pending', date: 'Aug 2026', icon: 'Next' },
+    { label: 'Visa Application', status: 'pending', date: 'Sep 2026', icon: 'Next' },
+    { label: 'University Enrollment', status: 'pending', date: 'Sep 2026', icon: 'Next' },
   ];
 
   const clsConfig = {
-    Hot: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', emoji: '🔥' },
-    Warm: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', emoji: '🌡️' },
-    Cold: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', emoji: '❄️' },
+    Hot: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', emoji: '' },
+    Warm: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', emoji: '' },
+    Cold: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', emoji: '' },
   };
   const cls = clsConfig[callSession.classification];
 
@@ -68,10 +68,10 @@ export default function ReportPage() {
                   {cls.emoji} {callSession.classification} Lead
                 </span>
                 <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-white/10 border border-white/20">
-                  🎯 Score: {callSession.lead_score}/100
+                  Score: {callSession.lead_score}/100
                 </span>
                 <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-white/10 border border-white/20">
-                  🇬🇧 Top Match: UK
+                  Top Match: UK
                 </span>
               </div>
             </div>
@@ -93,7 +93,7 @@ export default function ReportPage() {
               transition={{ delay: 0.1 }}
               className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm"
             >
-              <h2 className="text-base font-bold text-slate-900 mb-5">📊 Score Breakdown</h2>
+              <h2 className="text-base font-bold text-slate-900 mb-5">Score Breakdown</h2>
               <div className="space-y-4">
                 {[
                   { label: 'Academic Score', score: callSession.score_breakdown.academic, color: 'bg-blue-500', desc: 'GPA, field, institution' },
@@ -123,7 +123,7 @@ export default function ReportPage() {
               {/* AI Insight */}
               <div className="mt-5 p-4 bg-blue-50 border border-blue-100 rounded-xl">
                 <p className="text-sm text-blue-800 leading-relaxed">
-                  <span className="font-bold">💡 AI Insight: </span>{callSession.insight_text}
+                  <span className="font-bold">AI Insight: </span>{callSession.insight_text}
                 </p>
               </div>
             </motion.div>
@@ -136,7 +136,7 @@ export default function ReportPage() {
               className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm"
             >
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-base font-bold text-slate-900">✅ Recommended Actions</h2>
+                <h2 className="text-base font-bold text-slate-900">Recommended Actions</h2>
                 <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
                   {checkedItems.size}/{callSession.recommended_actions.length} Done
                 </span>
@@ -193,7 +193,7 @@ export default function ReportPage() {
               transition={{ delay: 0.3 }}
               className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm"
             >
-              <h2 className="text-base font-bold text-slate-900 mb-5">🎓 Top University Matches</h2>
+              <h2 className="text-base font-bold text-slate-900 mb-5">Top University Matches</h2>
               <div className="space-y-3">
                 {universityRecommendations.slice(0, 3).map((uni) => (
                   <div key={uni.id} className="flex items-center gap-4 p-4 border border-slate-100 rounded-xl hover:border-blue-200 hover:bg-blue-50/30 transition-all cursor-pointer">
@@ -220,7 +220,7 @@ export default function ReportPage() {
               transition={{ delay: 0.15 }}
               className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm"
             >
-              <h2 className="text-base font-bold text-slate-900 mb-5">📅 Your Timeline</h2>
+              <h2 className="text-base font-bold text-slate-900 mb-5">Your Timeline</h2>
 
               <div className="relative">
                 {/* Vertical line */}
@@ -274,7 +274,7 @@ export default function ReportPage() {
               transition={{ delay: 0.25 }}
               className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm"
             >
-              <h2 className="text-base font-bold text-slate-900 mb-4">📋 Session Summary</h2>
+              <h2 className="text-base font-bold text-slate-900 mb-4">Session Summary</h2>
               <div className="space-y-3">
                 <div className="flex justify-between items-center py-2 border-b border-slate-50">
                   <span className="text-xs text-slate-500">Student</span>
@@ -282,7 +282,7 @@ export default function ReportPage() {
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-slate-50">
                   <span className="text-xs text-slate-500">Recommended Country</span>
-                  <span className="text-xs font-semibold text-blue-600">🇬🇧 United Kingdom</span>
+                  <span className="text-xs font-semibold text-blue-600">United Kingdom</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-slate-50">
                   <span className="text-xs text-slate-500">Lead Score</span>
@@ -296,7 +296,7 @@ export default function ReportPage() {
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-xs text-slate-500">Scholarship Interest</span>
-                  <span className="text-xs font-semibold text-green-600">✅ Yes</span>
+                  <span className="text-xs font-semibold text-green-600">Yes</span>
                 </div>
               </div>
             </motion.div>

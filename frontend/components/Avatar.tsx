@@ -472,9 +472,9 @@ export default function Avatar() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
             <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Session Info</p>
             {[
-              { label: 'AI Counselor', value: 'StudyAbroad AI', icon: '🤖' },
-              { label: 'Messages', value: messages.length.toString(), icon: '💬' },
-              { label: 'Status', value: status === 'connected' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1), icon: '📡' },
+              { label: 'AI Counselor', value: 'StudyAbroad AI', icon: '' },
+              { label: 'Messages', value: messages.length.toString(), icon: '' },
+              { label: 'Status', value: status === 'connected' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1), icon: '' },
             ].map((s) => (
               <div key={s.label} className="flex items-center justify-between">
                 <span className="text-slate-500 text-xs">{s.icon} {s.label}</span>
@@ -490,19 +490,19 @@ export default function Avatar() {
           {/* Chat header */}
           <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800 flex-shrink-0">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-900/30 flex-shrink-0">
-              <span className="text-base leading-none">🤖</span>
+              <span className="text-base leading-none">AI</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-white">AI Counselor</p>
               <p className={`text-xs font-medium ${status === 'connected' ? 'text-emerald-400' : 'text-slate-500'}`}>
                 {status === 'connected'
-                  ? '● Live conversation'
+                  ? 'Live conversation'
                   : status === 'connecting'
-                  ? '⟳ Connecting…'
+                  ? 'Connecting…'
                   : status === 'ended'
                   ? 'Session ended'
                   : status === 'error'
-                  ? '✕ Connection error'
+                  ? 'Connection error'
                   : 'Starting…'}
               </p>
             </div>
@@ -515,7 +515,7 @@ export default function Avatar() {
             {messages.length === 0 && status !== 'error' && (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
                 <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center">
-                  <span className="text-3xl">🎓</span>
+                  <span className="text-3xl">AI</span>
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm font-semibold">Session starting…</p>
@@ -542,7 +542,7 @@ export default function Avatar() {
                         : 'bg-gradient-to-br from-slate-600 to-slate-700 text-slate-200'
                     }`}
                   >
-                    {msg.role === 'ai' ? '🤖' : 'U'}
+                    {msg.role === 'ai' ? 'AI' : 'U'}
                   </div>
 
                   {/* Bubble */}
@@ -562,7 +562,7 @@ export default function Avatar() {
                     </div>
                     <p className={`text-[10px] mt-1 px-1 ${msg.role === 'ai' ? 'text-slate-600' : 'text-blue-400/60'}`}>
                       {msg.timestamp}
-                      {msg.isStreaming && <span className="ml-1 text-blue-400 animate-pulse">● streaming</span>}
+                      {msg.isStreaming && <span className="ml-1 text-blue-400 animate-pulse">streaming</span>}
                     </p>
                   </div>
                 </motion.div>
