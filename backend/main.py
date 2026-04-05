@@ -3115,3 +3115,10 @@ async def save_session(request: SaveSessionRequest):
         raise HTTPException(status_code=502, detail=f"Failed to insert call session: {detail}") from err
     except URLError as err:
         raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+# --- PDF routes (sessions endpoint + report-pdf) ------------------------------
+import pdf_routes  # noqa: F401  – registers /api/v1/students/{id}/sessions and /api/v1/sessions/{id}/report-pdf
+
+
+# PDF routes - sessions + report PDF
+import pdf_routes  # noqa: F401
