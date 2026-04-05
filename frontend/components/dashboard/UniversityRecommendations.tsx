@@ -1,7 +1,8 @@
 'use client';
 import { motion } from 'framer-motion';
-import { universityRecommendations } from '@/lib/mockData';
-import { MapPin, Clock, TrendingUp, Sparkles } from 'lucide-react';
+import { MapPin, Clock, TrendingUp, Sparkles, AlertCircle } from 'lucide-react';
+import { useAuthSession } from '@/components/auth/AuthSessionProvider';
+import { useEffect, useState } from 'react';
 
 const tagColors: Record<string, { bg: string; text: string }> = {
   blue:   { bg: '#eff6ff', text: '#1d4ed8' },
@@ -12,6 +13,38 @@ const tagColors: Record<string, { bg: string; text: string }> = {
 };
 
 export default function UniversityRecommendations() {
+  const { session } = useAuthSession();
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadRecs() {
+      try {
+        const defaultRes = await fetch('http://localhost:8000/api/v1/universities/default-recommendations?limit=3');
+        const defaultData = await defaultRes.json().catch(() => []);
+        if (defaultRes.ok && Array.isArray(defaultData) && defaultData.length > 0) {
+          setRecommendations(defaultData);
+        }
+
+        if (session?.user?.id) {
+          const res = await fetch(`http://localhost:8000/api/v1/students/${session.user.id}/recommendations`);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              setRecommendations(data);
+            }
+          }
+        }
+      } catch (err) {
+        setError('Could not load university recommendations right now.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadRecs();
+  }, [session?.user?.id]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -33,25 +66,32 @@ export default function UniversityRecommendations() {
           </div>
           <div>
             <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>🎓 AI University Recommendations</h3>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Matched to your profile &amp; goals</p>
+            <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
+              {loading ? 'Loading default picks...' : 'Default 3 loaded, personalized by your session'}
+            </p>
           </div>
         </div>
-        <button style={{
-          fontSize: '12px', fontWeight: 600, color: '#2563eb',
-          background: '#eff6ff', border: 'none', borderRadius: '8px',
-          padding: '8px 14px', cursor: 'pointer',
-        }}>
-          View All →
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {error && <span style={{ fontSize: '12px', color: '#ea580c' }}><AlertCircle size={12} style={{ display: 'inline-block' }} /> {error}</span>}
+        </div>
       </div>
 
       {/* Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
-        {universityRecommendations.map((uni, i) => {
-          const tc = tagColors[uni.tagColor] || tagColors.gray;
-          return (
-            <motion.div
-              key={uni.id}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        {loading ? (
+             <div style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', color: '#64748b' }}>
+               Generating matches based on your latest session...
+             </div>
+          ) : (
+          recommendations.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', padding: '28px', textAlign: 'center', color: '#64748b' }}>
+              No recommendations yet. Complete a counseling session to generate your top 3 universities.
+            </div>
+          ) : recommendations.map((uni: any, i: number) => {
+            const tc = tagColors[uni.tagColor] || tagColors.gray;
+            return (
+              <motion.div
+                key={uni.id}
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.08 }}
@@ -117,14 +157,20 @@ export default function UniversityRecommendations() {
                 <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb' }}>{uni.match}%</span>
               </div>
 
-              {/* Deadline */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
-                <Clock size={10} color="#94a3b8" />
-                <span style={{ fontSize: '10px', color: '#94a3b8' }}>Deadline: <span style={{ fontWeight: 600, color: '#475569' }}>{uni.deadline}</span></span>
+{/* Deadline & Reason */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={10} color="#94a3b8" />
+                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>Deadline: <span style={{ fontWeight: 600, color: '#475569' }}>{uni.deadline || 'Rolling'}</span></span> 
+                </div>
+                {uni.reason && (
+                  <div style={{ fontSize: '10px', color: '#64748b', fontStyle: 'italic', lineHeight: 1.3 }}>"{uni.reason}"</div>
+                )}
               </div>
             </motion.div>
           );
-        })}
+        })
+        )}
       </div>
     </motion.div>
   );
