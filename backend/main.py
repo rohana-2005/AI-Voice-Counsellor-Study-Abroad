@@ -1140,6 +1140,32 @@ def _normalize_phone_for_whatsapp(phone: str) -> str:
     return f"whatsapp:{cleaned}"
 
 
+def _normalize_phone_for_call(phone: str) -> str:
+    raw = (phone or "").strip()
+    if not raw:
+        return ""
+
+    # Keep leading + if provided, then strip non-digit characters from the rest.
+    has_plus = raw.startswith("+")
+    digits = re.sub(r"\D", "", raw)
+    if not digits:
+        return ""
+
+    if has_plus:
+        return f"+{digits}"
+
+    if raw.startswith("00"):
+        return f"+{digits[2:]}" if len(digits) > 2 else ""
+
+    # Default to India country code when caller does not specify one.
+    if len(digits) == 10:
+        return f"+91{digits}"
+    if len(digits) == 11 and digits.startswith("0"):
+        return f"+91{digits[1:]}"
+
+    return f"+91{digits}"
+
+
 def _supabase_base_and_key() -> tuple[str, str]:
     supabase_url = os.getenv("SUPABASE_URL")
     service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
@@ -1487,6 +1513,7 @@ def _summarize_transcript_with_groq(transcript: str) -> str:
 
 
 TWILIO_CALL_STATE: dict[str, dict[str, Any]] = {}
+TWILIO_SAVED_CALL_SIDS: set[str] = set()
 
 
 def _phone_digits(value: str) -> str:
@@ -1833,15 +1860,15 @@ def _build_call_gather_twiml(message: str, action_url: str, end_call: bool = Fal
     )
 
 
-def _finalize_twilio_call_session(call_sid: str, fallback_phone: str = "") -> None:
+def _finalize_twilio_call_session(call_sid: str, fallback_phone: str = "") -> bool:
     state = TWILIO_CALL_STATE.get(call_sid)
     if not state:
-        return
+        return False
     transcript_lines = state.get("history", [])
     transcript = "\n".join(line for line in transcript_lines if isinstance(line, str)).strip()
     if not transcript:
         TWILIO_CALL_STATE.pop(call_sid, None)
-        return
+        return False
 
     student_id = state.get("student_id")
     if not student_id and fallback_phone:
@@ -1851,15 +1878,23 @@ def _finalize_twilio_call_session(call_sid: str, fallback_phone: str = "") -> No
         if state_phone:
             student_id = _resolve_student_id_by_phone(state_phone)
 
+    saved = False
     try:
         inserted = _insert_call_session(transcript=transcript, student_id=student_id)
         inserted_id = str(inserted.get("id") or "") if isinstance(inserted, dict) else ""
+        saved = bool(inserted_id)
+        if saved:
+            TWILIO_SAVED_CALL_SIDS.add(str(call_sid))
         if student_id and inserted_id:
             _send_whatsapp_summary(str(student_id), inserted_id)
     except Exception:
         pass
     finally:
         TWILIO_CALL_STATE.pop(call_sid, None)
+    return saved
+
+
+TWILIO_TERMINAL_STATUSES = {"completed", "busy", "failed", "no-answer", "canceled"}
 
 
 @app.post("/api/v1/calls/outbound", tags=["voice"])
@@ -1880,6 +1915,8 @@ def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
         target_number = payload.student_phone.strip()
     if not target_number and payload.student_id:
         target_number = _resolve_student_phone_by_id(payload.student_id) or ""
+
+    target_number = _normalize_phone_for_call(target_number)
     if not target_number:
         raise HTTPException(status_code=400, detail="Unable to determine student phone number for call.")
 
@@ -1890,6 +1927,7 @@ def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
     opening_script = _generate_call_opening_with_groq(full_context)
     webhook_base = (os.getenv("TWILIO_WEBHOOK_BASE_URL") or "").strip().rstrip("/")
     voice_turn_url = f"{webhook_base}/api/v1/webhook/voice-turn" if _is_public_webhook_base(webhook_base) else ""
+    voice_status_url = f"{webhook_base}/api/v1/webhook/voice-status" if _is_public_webhook_base(webhook_base) else ""
     if not voice_turn_url:
         raise HTTPException(
             status_code=400,
@@ -1911,6 +1949,9 @@ def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
                     "To": target_number,
                     "From": from_number,
                     "Twiml": twiml,
+                    "StatusCallback": voice_status_url,
+                    "StatusCallbackMethod": "POST",
+                    "StatusCallbackEvent": "completed",
                 },
             )
 
@@ -1938,6 +1979,50 @@ def create_outbound_call(payload: OutboundCallRequest) -> dict[str, str]:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to initiate outbound call: {exc}") from exc
+
+
+@app.post("/api/v1/webhook/voice-status", tags=["voice"])
+def handle_voice_status(
+    CallSid: str = Form(...),
+    CallStatus: str = Form(default=""),
+    From: str = Form(default=""),
+    To: str = Form(default=""),
+):
+    status = (CallStatus or "").strip().lower()
+    finalized = False
+    had_state = CallSid in TWILIO_CALL_STATE
+    saved = False
+
+    if status in TWILIO_TERMINAL_STATUSES:
+        fallback_phone = _extract_student_phone_from_call(From, To)
+        saved = _finalize_twilio_call_session(CallSid, fallback_phone=fallback_phone)
+
+        if not saved and CallSid not in TWILIO_SAVED_CALL_SIDS:
+            # Fail-safe: if process reload/loss removed state, still persist a session marker.
+            student_id = _resolve_student_id_by_phone(fallback_phone) if fallback_phone else None
+            fallback_transcript = (
+                f"[SYSTEM] Twilio call ended. Call SID: {CallSid}. "
+                f"Status: {status}. Transcript unavailable from webhook state."
+            )
+            try:
+                inserted = _insert_call_session(transcript=fallback_transcript, student_id=student_id)
+                inserted_id = str(inserted.get("id") or "") if isinstance(inserted, dict) else ""
+                if inserted_id:
+                    saved = True
+                    TWILIO_SAVED_CALL_SIDS.add(str(CallSid))
+            except Exception:
+                saved = False
+
+        finalized = True
+
+    return {
+        "status": "ok",
+        "call_sid": CallSid,
+        "call_status": status,
+        "had_state": had_state,
+        "saved": saved,
+        "finalized": finalized,
+    }
 
 @app.post("/api/v1/webhook/incoming-call")
 def handle_incoming_call(
@@ -2790,6 +2875,253 @@ class SaveSessionRequest(BaseModel):
     student_id: Optional[str] = None
     student_phone: Optional[str] = None
 
+class RecommendationResponse(BaseModel):
+    id: str | None = None
+    name: str | None = None
+    country: str | None = None
+    flag: str | None = None
+    tuition: str | None = None
+    ranking: str | None = None
+    course: str | None = None
+    match: int | None = None
+    deadline: str | None = None
+    tag: str | None = None
+    tagColor: str | None = None
+    reason: str | None = None
+
+
+def _country_flag(country: str | None) -> str:
+    country_map = {
+        "united kingdom": "GB",
+        "uk": "GB",
+        "great britain": "GB",
+        "ireland": "IE",
+        "united states": "US",
+        "usa": "US",
+        "canada": "CA",
+        "australia": "AU",
+        "new zealand": "NZ",
+        "germany": "DE",
+        "france": "FR",
+        "italy": "IT",
+        "spain": "ES",
+        "netherlands": "NL",
+        "sweden": "SE",
+        "singapore": "SG",
+        "uae": "AE",
+    }
+    key = (country or "").strip().lower()
+    code = country_map.get(key)
+    if not code:
+        return "ðŸŽ“"
+    return "".join(chr(127397 + ord(ch)) for ch in code)
+
+
+def _format_tuition(cost: Any) -> str:
+    if cost in (None, ""):
+        return "N/A"
+    try:
+        value = float(cost)
+        return f"${value:,.0f}/yr"
+    except (TypeError, ValueError):
+        return str(cost)
+
+
+def _build_recommendation_from_db(
+    uni: dict[str, Any],
+    llm_item: dict[str, Any] | None = None,
+) -> RecommendationResponse:
+    llm_item = llm_item or {}
+    match_raw = llm_item.get("match", 80)
+    try:
+        match_value = int(match_raw)
+    except (TypeError, ValueError):
+        match_value = 80
+    match_value = max(0, min(100, match_value))
+
+    return RecommendationResponse(
+        id=str(uni.get("id") or ""),
+        name=str(uni.get("name") or ""),
+        country=str(uni.get("country") or ""),
+        flag=_country_flag(uni.get("country")),
+        tuition=_format_tuition(uni.get("average_cost_usd")),
+        ranking="N/A",
+        course=str(llm_item.get("course") or "Recommended Program"),
+        match=match_value,
+        deadline=str(llm_item.get("deadline") or "Rolling"),
+        tag=str(llm_item.get("tag") or "Top Match"),
+        tagColor=str(llm_item.get("tagColor") or "blue"),
+        reason=str(llm_item.get("reason") or "Recommended based on your latest counseling session."),
+    )
+
+
+def _fetch_universities(limit: int = 50) -> list[dict[str, Any]]:
+    supabase_url = os.getenv("SUPABASE_URL")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not service_key:
+        return []
+
+    req = urlrequest.Request(
+        f"{supabase_url}/rest/v1/universities?select=*&order=created_at.asc&limit={max(1, limit)}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=10) as res:
+            rows = json.loads(res.read().decode("utf-8"))
+            return rows if isinstance(rows, list) else []
+    except Exception:
+        return []
+
+
+@app.get("/api/v1/universities/default-recommendations", response_model=list[RecommendationResponse], tags=["recommendations"])
+async def get_default_university_recommendations(limit: int = Query(default=3, ge=1, le=10)):
+    universities = _fetch_universities(limit=limit)
+    return [_build_recommendation_from_db(u) for u in universities[:limit]]
+
+@app.get("/api/v1/students/{student_id}/recommendations", response_model=list[RecommendationResponse], tags=["recommendations"])
+async def get_student_recommendations(student_id: str):
+    try:
+        supabase_url = os.getenv("SUPABASE_URL")
+        service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+        if not supabase_url or not service_key:
+            raise HTTPException(status_code=500, detail="Missing DB config")
+
+        headers = {
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Accept": "application/json",
+        }
+        
+        session_req = urlrequest.Request(
+            f"{supabase_url}/rest/v1/call_sessions?student_id=eq.{student_id}&select=transcript,detailed_report,raw_ai_response&order=created_at.desc&limit=1",
+            headers=headers,
+            method="GET"
+        )
+        transcript_text = ""
+        try:
+            with urlrequest.urlopen(session_req, timeout=10) as res:
+                sessions = json.loads(res.read().decode('utf-8'))
+                if sessions:
+                    transcript_text = str(sessions[0])
+        except Exception as e:
+            print("Sessions error", e)
+
+        universities = _fetch_universities(limit=50)
+            
+        if not universities:
+            return []
+
+        if not transcript_text:
+            # Default view before session insights are available.
+            return [_build_recommendation_from_db(u) for u in universities[:3]]
+
+        universities_by_id = {
+            str(row.get("id")): row
+            for row in universities
+            if row.get("id")
+        }
+
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            # DB-only fallback when LLM is unavailable.
+            return [_build_recommendation_from_db(u) for u in universities[:3]]
+
+        model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        prompt = f"""
+You are a study-abroad counselor.
+Pick the top 3 universities ONLY from the provided database IDs.
+
+Student session details:
+{transcript_text}
+
+Available universities (DB rows):
+{json.dumps(universities)}
+
+Return strict JSON array with exactly 3 items.
+Each item must contain only:
+- id (must be one of the provided IDs)
+- course
+- match (0-100 integer)
+- deadline
+- tag
+- tagColor (blue|green|purple|orange|gray)
+- reason
+No markdown. No extra keys.
+"""
+
+        llm_req = urlrequest.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=json.dumps(
+                {
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "Output raw JSON array only. Use only IDs from input universities.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.2,
+                }
+            ).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with urlrequest.urlopen(llm_req, timeout=30) as res:
+                resp_data = json.loads(res.read().decode("utf-8"))
+                content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                if content.startswith("```"):
+                    content = content.replace("```json", "").replace("```", "").strip()
+
+                llm_recs = json.loads(content)
+                if not isinstance(llm_recs, list):
+                    raise ValueError("LLM response is not a list")
+
+                resolved: list[RecommendationResponse] = []
+                seen: set[str] = set()
+                for item in llm_recs:
+                    if not isinstance(item, dict):
+                        continue
+                    rec_id = str(item.get("id") or "")
+                    if not rec_id or rec_id in seen:
+                        continue
+                    uni_row = universities_by_id.get(rec_id)
+                    if not uni_row:
+                        continue
+                    resolved.append(_build_recommendation_from_db(uni_row, item))
+                    seen.add(rec_id)
+                    if len(resolved) == 3:
+                        break
+
+                if len(resolved) < 3:
+                    for row in universities:
+                        row_id = str(row.get("id") or "")
+                        if not row_id or row_id in seen:
+                            continue
+                        resolved.append(_build_recommendation_from_db(row))
+                        seen.add(row_id)
+                        if len(resolved) == 3:
+                            break
+
+                return resolved[:3]
+        except Exception as e:
+            print(f"Error calling Groq for recommendations: {e}")
+            return [_build_recommendation_from_db(u) for u in universities[:3]]
+    except Exception as general_err:
+        print(f"General error: {general_err}")
+        fallback = _fetch_universities(limit=3)
+        return [_build_recommendation_from_db(u) for u in fallback[:3]]
+
 @app.post("/save-session")
 async def save_session(request: SaveSessionRequest):
     try:
@@ -2825,3 +3157,10 @@ async def save_session(request: SaveSessionRequest):
         raise HTTPException(status_code=502, detail=f"Failed to insert call session: {detail}") from err
     except URLError as err:
         raise HTTPException(status_code=502, detail=f"Supabase unreachable: {err.reason}") from err
+
+# --- PDF routes (sessions endpoint + report-pdf) ------------------------------
+import pdf_routes  # noqa: F401  – registers /api/v1/students/{id}/sessions and /api/v1/sessions/{id}/report-pdf
+
+
+# PDF routes - sessions + report PDF
+import pdf_routes  # noqa: F401
