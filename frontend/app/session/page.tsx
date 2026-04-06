@@ -182,7 +182,7 @@ export default function SessionPage() {
             }}
           >
             <Phone style={{ width: 14, height: 14 }} />
-            {isCalling ? 'Calling...' : 'Connect Via Call (No Avatar)'}
+            {isCalling ? 'Calling...' : 'Connect Via Call'}
           </button>
 
           {/* Call message feedback */}
