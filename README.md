@@ -10,13 +10,15 @@ It combines Google auth, smart onboarding, live AI sessions (avatar + call), lea
 
 - 👨‍🎓 User journey:
 	- First sign-in: onboarding
+	- Onboarding voice interaction powered by Vapi
 	- Then: personal dashboard
 	- Multilingual counseling experience (example: English + Hindi)
 	- Schedule counseling sessions via Google Calendar flow
 	- Start session in 2 modes:
 		- AI Avatar (live visual counselor)
-		- AI Calling mode (when avatar/device is unavailable)
+		- AI Calling mode via Twilio (when avatar/device is unavailable)
 	- Conversations are stored, analyzed, and converted into reports
+	- Session reminders and follow-ups sent via Twilio WhatsApp
 	- Follow-up recommendations and next actions visible in dashboard/report views
 
 - 🛠️ Admin journey:
@@ -30,9 +32,11 @@ It combines Google auth, smart onboarding, live AI sessions (avatar + call), lea
 - 🔐 Google OAuth login and role-aware access
 - 🗂️ Supabase-backed user/admin records
 - 👋 First-time onboarding detection (`needs_onboarding` flow)
+- ☎️ Vapi calling for onboarding and first-contact voice capture
 - 🌐 Multilingual conversation support for student counseling
 - 🎙️ AI counseling sessions with transcript capture
-- 📞 Outbound call support for offline counseling flow
+- 📞 Twilio calling support for live/offline counseling sessions
+- 🔔 Twilio WhatsApp reminders for scheduled sessions
 - 📊 Lead scoring and Hot/Warm/Cold style classification
 - 🏫 University recommendation APIs + dashboard presentation
 - 📝 Session report generation with score breakdown and action checklist
@@ -158,6 +162,7 @@ NEXT_PUBLIC_VAPI_ASSISTANT_ID=
 - `POST /api/v1/calls/webhook`
 - `POST /api/v1/calls/outbound`
 - `POST /api/v1/messages/whatsapp/send-summary`
+- `POST /api/v1/messages/whatsapp/send-reminder`
 - `POST /api/v1/rag/query`
 - `GET /api/v1/dashboard/metrics`
 - `GET /api/v1/admin/priority-queue`
@@ -170,9 +175,9 @@ NEXT_PUBLIC_VAPI_ASSISTANT_ID=
 - Student report access
 - Operational dashboard metrics for counselor teams
 
-## Why Claude9 for Study Abroad? 🌍
+## Why StudyAbroad.AI? 🌍
 
-Claude9 is designed as an end-to-end counseling OS: from first contact to final guidance.
+StudyAbroad.AI is designed as an end-to-end counseling OS: from first contact to final guidance.
 
 - Human-like AI interaction
 - Persistent student context across sessions
