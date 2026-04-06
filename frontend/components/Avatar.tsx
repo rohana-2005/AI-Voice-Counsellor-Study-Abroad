@@ -726,7 +726,7 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
             {messages.length === 0 && status !== 'error' && (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
                 <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center">
-                  <span className="text-3xl">🎓</span>
+                  <span className="text-3xl">AI</span>
                 </div>
                 <div>
                   <p style={{ color: '#475569', fontSize: 14, fontWeight: 600, margin: 0 }}>Session starting…</p>
@@ -753,7 +753,7 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                         : 'bg-gradient-to-br from-slate-600 to-slate-700 text-slate-200'
                     }`}
                   >
-                    {msg.role === 'ai' ? '🤖' : 'U'}
+                    {msg.role === 'ai' ? 'AI' : 'U'}
                   </div>
 
                   {/* Bubble */}
@@ -783,7 +783,7 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                       color: msg.role === 'ai' ? '#cbd5e1' : '#93c5fd',
                     }}>
                       {msg.timestamp}
-                      {msg.isStreaming && <span className="ml-1 text-blue-400 animate-pulse">● streaming</span>}
+                      {msg.isStreaming && <span className="ml-1 text-blue-400 animate-pulse">streaming</span>}
                     </p>
                   </div>
                 </motion.div>

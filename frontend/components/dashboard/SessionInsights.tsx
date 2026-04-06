@@ -6,6 +6,16 @@ import Link from 'next/link';
 import { useAuthSession } from '@/components/auth/AuthSessionProvider';
 import { recentSessions } from '@/lib/mockData';
 
+type Session = {
+  id: string;
+  created_at?: string | null;
+  transcript?: string | null;
+  sentiment?: string | null;
+  lead_score?: number | null;
+  classification?: 'Hot' | 'Warm' | 'Cold' | string | null;
+  detailed_report?: string | null;
+};
+
 const sentimentCfg = {
   positive: { bg: '#f0fdf4', text: '#15803d', emoji: '', label: 'Positive' },
   neutral:  { bg: '#fffbeb', text: '#b45309', emoji: '', label: 'Neutral'  },
@@ -13,19 +23,9 @@ const sentimentCfg = {
 };
 
 const clsCfg = {
-  Hot:  { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', emoji: '🔥' },
-  Warm: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', emoji: '🌡️' },
-  Cold: { bg: '#eef2ff', text: '#4338ca', border: '#c7d2fe', emoji: '❄️' },
-};
-
-type Session = {
-  id: string;
-  created_at?: string | null;
-  sentiment?: string | null;
-  lead_score?: number | null;
-  classification?: 'Hot' | 'Warm' | 'Cold' | null;
-  detailed_report?: string | null;
-  transcript?: string | null;
+  Hot:  { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', emoji: '' },
+  Warm: { bg: '#fffbeb', text: '#b45309', border: '#fde68a', emoji: '' },
+  Cold: { bg: '#eef2ff', text: '#4338ca', border: '#c7d2fe', emoji: '' },
 };
 
 // ─── PDF Modal ────────────────────────────────────────────────────────────────
@@ -287,7 +287,7 @@ export default function SessionInsights() {
             <MessageSquare size={18} color="#2563eb" />
           </div>
           <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>📞 Session Insights</h3>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>Session Insights</h3>
             <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Recent AI counseling sessions</p>
           </div>
         </div>
@@ -306,7 +306,7 @@ export default function SessionInsights() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
           {displaySessions.map((session, i) => {
             const sent = sentimentCfg[session.sentiment as keyof typeof sentimentCfg] || sentimentCfg.neutral;
-            const cls  = clsCfg[session.classification] || clsCfg.Warm;
+            const cls  = clsCfg[session.classification as keyof typeof clsCfg] || clsCfg.Warm;
 
             return (
               <motion.div
