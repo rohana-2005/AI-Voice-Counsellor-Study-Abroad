@@ -1,4 +1,4 @@
-# Claude9 🎓🤖
+# StudyAbroad.AI
 
 AI-powered Study Abroad counseling platform for students and counselors.
 
@@ -11,6 +11,7 @@ It combines Google auth, smart onboarding, live AI sessions (avatar + call), lea
 - 👨‍🎓 User journey:
 	- First sign-in: onboarding
 	- Then: personal dashboard
+	- Multilingual counseling experience (example: English + Hindi)
 	- Schedule counseling sessions via Google Calendar flow
 	- Start session in 2 modes:
 		- AI Avatar (live visual counselor)
@@ -29,6 +30,7 @@ It combines Google auth, smart onboarding, live AI sessions (avatar + call), lea
 - 🔐 Google OAuth login and role-aware access
 - 🗂️ Supabase-backed user/admin records
 - 👋 First-time onboarding detection (`needs_onboarding` flow)
+- 🌐 Multilingual conversation support for student counseling
 - 🎙️ AI counseling sessions with transcript capture
 - 📞 Outbound call support for offline counseling flow
 - 📊 Lead scoring and Hot/Warm/Cold style classification
