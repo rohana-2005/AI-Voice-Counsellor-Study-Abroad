@@ -673,9 +673,18 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
         >
 
           {/* Chat header */}
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800 flex-shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-900/30 flex-shrink-0">
-              <span className="text-base leading-none">AI</span>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '16px 20px', borderBottom: '1px solid #f1f5f9',
+            flexShrink: 0,
+          }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 12,
+              background: 'linear-gradient(135deg, #2563eb, #4338ca)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, boxShadow: '0 4px 10px rgba(37,99,235,0.2)',
+            }}>
+              <span style={{ fontSize: 16, lineHeight: 1 }}>🤖</span>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>AI Counselor</p>
