@@ -282,9 +282,31 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
     setIsMuted((prev) => !prev);
   };
 
+  const getGroundedMessage = async (rawMessage: string): Promise<string> => {
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/avatar/grounding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: rawMessage }),
+      });
+
+      if (!res.ok) {
+        return rawMessage;
+      }
+
+      const payload = (await res.json().catch(() => ({}))) as {
+        augmented_message?: unknown;
+      };
+      const augmented = payload.augmented_message;
+      return typeof augmented === 'string' && augmented.trim() ? augmented : rawMessage;
+    } catch {
+      return rawMessage;
+    }
+  };
+
   // ─── Send text message ───────────────────────────────────────────────────────
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || status !== 'connected') return;
 
@@ -303,8 +325,9 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
     setMessages((prev) => [...prev, userMsg]);
     transcriptRef.current += `[USER]: ${trimmed}\n`;
 
-    // Send to Anam (SDK handles speech + response)
-    client.sendUserMessage(trimmed);
+    // Ground with Supabase context when available, otherwise keep original message.
+    const preparedMessage = await getGroundedMessage(trimmed);
+    client.sendUserMessage(preparedMessage);
 
     setInput('');
     inputRef.current?.focus();
@@ -313,7 +336,7 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   };
 
@@ -628,7 +651,7 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
             borderRadius: 16, padding: '16px 20px',
             boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
           }}>
-            <p style={{ color: '#94a3b8', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Session Info</p>
+            {/* <p style={{ color: '#94a3b8', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Session Info</p>
             {[
               { label: 'AI Counselor', value: 'StudyAbroad AI', icon: '' },
               { label: 'Messages', value: messages.length.toString(), icon: '' },
@@ -638,7 +661,7 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                 <span style={{ color: '#64748b', fontSize: 12 }}>{s.icon} {s.label}</span>
                 <span style={{ color: '#0f172a', fontSize: 12, fontWeight: 600 }}>{s.value}</span>
               </div>
-            ))}
+            ))} */}
 
             <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 8, paddingTop: 12 }}>
               <button
