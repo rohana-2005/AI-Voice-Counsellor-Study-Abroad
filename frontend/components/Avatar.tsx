@@ -102,6 +102,8 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
   const [input, setInput] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
+  const [groundingStatus, setGroundingStatus] = useState<'unknown' | 'grounded' | 'fallback'>('unknown');
+  const [groundingInfo, setGroundingInfo] = useState<string>('No messages yet');
 
   // Transcript (string that accumulates over the session)
   const transcriptRef = useRef<string>('');
@@ -282,7 +284,7 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
     setIsMuted((prev) => !prev);
   };
 
-  const getGroundedMessage = async (rawMessage: string): Promise<string> => {
+  const getGroundedMessage = async (rawMessage: string): Promise<{ message: string; grounded: boolean; info: string }> => {
     try {
       const res = await fetch('http://localhost:8000/api/v1/avatar/grounding', {
         method: 'POST',
@@ -291,16 +293,35 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
       });
 
       if (!res.ok) {
-        return rawMessage;
+        return {
+          message: rawMessage,
+          grounded: false,
+          info: `Grounding request failed: HTTP ${res.status}`,
+        };
       }
 
       const payload = (await res.json().catch(() => ({}))) as {
         augmented_message?: unknown;
+        grounded?: unknown;
+        contexts?: unknown;
+        fallback_reason?: unknown;
       };
       const augmented = payload.augmented_message;
-      return typeof augmented === 'string' && augmented.trim() ? augmented : rawMessage;
+      const message = typeof augmented === 'string' && augmented.trim() ? augmented : rawMessage;
+      const grounded = Boolean(payload.grounded);
+      const contextCount = Array.isArray(payload.contexts) ? payload.contexts.length : 0;
+      const fallbackReason = typeof payload.fallback_reason === 'string' ? payload.fallback_reason : '';
+      const info = grounded
+        ? `Grounded from DB (${contextCount} chunks)`
+        : `Fallback: ${fallbackReason || 'No relevant DB chunk'}`;
+
+      return { message, grounded, info };
     } catch {
-      return rawMessage;
+      return {
+        message: rawMessage,
+        grounded: false,
+        info: 'Grounding request failed: network error',
+      };
     }
   };
 
@@ -326,8 +347,11 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
     transcriptRef.current += `[USER]: ${trimmed}\n`;
 
     // Ground with Supabase context when available, otherwise keep original message.
-    const preparedMessage = await getGroundedMessage(trimmed);
-    client.sendUserMessage(preparedMessage);
+    const grounding = await getGroundedMessage(trimmed);
+    setGroundingStatus(grounding.grounded ? 'grounded' : 'fallback');
+    setGroundingInfo(grounding.info);
+    console.log(grounding.grounded ? 'Grounded from DB' : 'Fallback (no DB match)', grounding.info);
+    client.sendUserMessage(grounding.message);
 
     setInput('');
     inputRef.current?.focus();
@@ -726,7 +750,31 @@ export default function Avatar({ studentId, studentPhone, studentName }: { stude
                   : 'Starting…'}
               </p>
             </div>
+            <div style={{
+              marginRight: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              color: groundingStatus === 'grounded' ? '#166534' : groundingStatus === 'fallback' ? '#b45309' : '#64748b',
+              background: groundingStatus === 'grounded' ? '#dcfce7' : groundingStatus === 'fallback' ? '#fef3c7' : '#e2e8f0',
+              border: '1px solid',
+              borderColor: groundingStatus === 'grounded' ? '#86efac' : groundingStatus === 'fallback' ? '#fcd34d' : '#cbd5e1',
+              borderRadius: 999,
+              padding: '4px 8px',
+              whiteSpace: 'nowrap',
+            }} title={groundingInfo}>
+              {groundingStatus === 'grounded' ? 'Grounded' : groundingStatus === 'fallback' ? 'DB Fallback' : 'Awaiting'}
+            </div>
             <div style={{ fontSize: 11, color: '#cbd5e1', fontFamily: 'monospace' }}>{messages.length} msgs</div>
+          </div>
+
+          <div style={{
+            padding: '8px 20px',
+            borderBottom: '1px solid #f1f5f9',
+            fontSize: 11,
+            color: groundingStatus === 'grounded' ? '#166534' : groundingStatus === 'fallback' ? '#b45309' : '#64748b',
+            background: groundingStatus === 'grounded' ? '#f0fdf4' : groundingStatus === 'fallback' ? '#fffbeb' : '#f8fafc',
+          }}>
+            {groundingInfo}
           </div>
 
           {(savedSessionId || saveErrorMsg) && (
